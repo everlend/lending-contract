@@ -9,6 +9,7 @@ use solana_program::{entrypoint::ProgramResult, program_error::ProgramError};
 pub enum StateVersion {
     /// new
     Uninitialized = 0,
+
     /// version 1
     V1 = 1,
 }
@@ -28,6 +29,7 @@ impl StateVersion {
             Err(ProgramError::AccountAlreadyInitialized)
         }
     }
+
     /// Error if not initialized
     pub fn initialized(&self) -> ProgramResult {
         if *self != StateVersion::Uninitialized {
@@ -44,6 +46,7 @@ impl StateVersion {
 pub struct Market {
     /// Data version
     pub version: StateVersion,
+
     /// Market owner
     pub owner: Pubkey,
 }

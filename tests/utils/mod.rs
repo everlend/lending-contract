@@ -4,8 +4,8 @@ use solana_sdk::pubkey::Pubkey;
 
 pub mod market;
 
-pub async fn get_account(test_context: &mut ProgramTestContext, pubkey: &Pubkey) -> Account {
-    test_context
+pub async fn get_account(context: &mut ProgramTestContext, pubkey: &Pubkey) -> Account {
+    context
         .banks_client
         .get_account(*pubkey)
         .await

@@ -16,11 +16,13 @@ pub enum LendingError {
     #[error("Example error")]
     ExampleError,
 }
+
 impl From<LendingError> for ProgramError {
     fn from(e: LendingError) -> Self {
         ProgramError::Custom(e as u32)
     }
 }
+
 impl<T> DecodeError<T> for LendingError {
     fn type_of() -> &'static str {
         "LendingError"

@@ -26,6 +26,7 @@ impl Processor {
         market_data.version.uninitialized()?;
 
         market_data.owner = *owner.key;
+        market_data.version = StateVersion::V1;
 
         market_data.serialize(&mut *market.try_borrow_mut_data()?)?;
 
@@ -39,6 +40,7 @@ impl Processor {
         input: &[u8],
     ) -> ProgramResult {
         let instruction = LendingInstruction::try_from_slice(input)?;
+
         match instruction {
             LendingInstruction::InitMarket => {
                 msg!("LendingInstruction: InitMarket");

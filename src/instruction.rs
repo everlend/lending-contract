@@ -30,6 +30,7 @@ pub fn init_market(
         AccountMeta::new(*market, false),
         AccountMeta::new_readonly(*owner, true),
     ];
+
     Ok(Instruction {
         program_id: *program_id,
         accounts,
