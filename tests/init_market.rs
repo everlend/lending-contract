@@ -3,23 +3,14 @@
 mod utils;
 
 use borsh::BorshDeserialize;
-use everlend_lending::state::*;
-use everlend_lending::*;
-use solana_program::{instruction::InstructionError, pubkey::Pubkey};
+use everlend_lending::{id, instruction, state::*};
+use solana_program::instruction::InstructionError;
 use solana_program_test::*;
 use solana_sdk::{
     signature::Signer,
     transaction::{Transaction, TransactionError},
 };
 use utils::*;
-
-pub fn program_test() -> ProgramTest {
-    ProgramTest::new(
-        "everlend_lending",
-        id(),
-        processor!(processor::Processor::process_instruction),
-    )
-}
 
 #[tokio::test]
 async fn success() {
@@ -31,7 +22,7 @@ async fn success() {
     let market_account = get_account(&mut context, &market_info.market.pubkey()).await;
     let market_account = Market::try_from_slice(&market_account.data).unwrap();
     assert_eq!(market_account.owner, market_info.owner.pubkey());
-    assert_eq!(market_account.version, StateVersion::V1);
+    assert_eq!(market_account.version, PROGRAM_VERSION);
 }
 
 #[tokio::test]

@@ -1,6 +1,5 @@
-use crate::state::*;
-use everlend_lending::*;
-use solana_program::system_instruction;
+use everlend_lending::{id, instruction, state::Market};
+use solana_program::{borsh::get_packed_len, system_instruction};
 use solana_program_test::ProgramTestContext;
 use solana_sdk::transaction::Transaction;
 use solana_sdk::{
@@ -28,8 +27,8 @@ impl MarketInfo {
                 system_instruction::create_account(
                     &context.payer.pubkey(),
                     &self.market.pubkey(),
-                    rent.minimum_balance(Market::LEN),
-                    Market::LEN as u64,
+                    rent.minimum_balance(get_packed_len::<Market>()),
+                    get_packed_len::<Market>() as u64,
                     &id(),
                 ),
                 instruction::init_market(&id(), &self.market.pubkey(), &self.owner.pubkey())
