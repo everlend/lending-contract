@@ -84,8 +84,6 @@ impl Processor {
             Liquidity::LEN as u64,
         )?;
 
-        assert_rent_exempt(rent, liquidity_info)?;
-
         // Get liquidity state
         let mut liquidity = assert_uninitialized::<Liquidity>(liquidity_info)?;
         if liquidity_info.owner != program_id {
