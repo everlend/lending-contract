@@ -5,7 +5,7 @@ use solana_program::{
     instruction::{AccountMeta, Instruction},
     program_error::ProgramError,
     pubkey::Pubkey,
-    sysvar,
+    system_program, sysvar,
 };
 
 /// Instruction definition
@@ -14,22 +14,23 @@ pub enum LendingInstruction {
     /// Initializes new market
     ///
     /// Accounts:
-    /// [W] new uninitialized market account
-    /// [RS] market owner
-    /// [R] rent sysvar
+    /// [W] Market account - uninitialized.
+    /// [RS] Market owner
+    /// [R] Rent sysvar
     InitMarket,
 
     /// Create liquidity token
     ///
     /// Accounts:
-    /// [W] new uninitialized liquidity account
-    /// [R] token mint account
-    /// [W] token account
-    /// [W] pool mint account
-    /// [R] market account
-    /// [R] market authority
-    /// [R] rent sysvar
-    /// [R] token program id
+    /// [W] Liquidity account to create - uninitialized.
+    /// [R] Token mint account
+    /// [W] Token account - uninitialized.
+    /// [W] Pool mint account - uninitialized.
+    /// [W] Market account
+    /// [WS] Market owner
+    /// [R] Market authority
+    /// [R] Rent sysvar
+    /// [R] Token program id
     CreateLiquidityToken,
 }
 
@@ -62,18 +63,21 @@ pub fn create_liquidity_token(
     token_account: &Pubkey,
     pool_mint: &Pubkey,
     market: &Pubkey,
+    market_owner: &Pubkey,
     market_authority: &Pubkey,
 ) -> Result<Instruction, ProgramError> {
-    let init_data = LendingInstruction::InitMarket;
+    let init_data = LendingInstruction::CreateLiquidityToken;
     let data = init_data.try_to_vec()?;
     let accounts = vec![
         AccountMeta::new(*liquidity, false),
         AccountMeta::new_readonly(*token_mint, false),
         AccountMeta::new(*token_account, false),
         AccountMeta::new(*pool_mint, false),
-        AccountMeta::new_readonly(*market, false),
+        AccountMeta::new(*market, false),
+        AccountMeta::new(*market_owner, true),
         AccountMeta::new_readonly(*market_authority, false),
         AccountMeta::new_readonly(sysvar::rent::id(), false),
+        AccountMeta::new_readonly(system_program::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
     ];
 

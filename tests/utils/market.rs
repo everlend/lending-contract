@@ -1,4 +1,8 @@
-use everlend_lending::{id, instruction, state::Market};
+use borsh::BorshDeserialize;
+use everlend_lending::{
+    find_authority_bump_seed, id, instruction,
+    state::{Liquidity, Market},
+};
 use solana_program::{borsh::get_packed_len, system_instruction};
 use solana_program_test::ProgramTestContext;
 use solana_sdk::transaction::Transaction;
@@ -7,6 +11,11 @@ use solana_sdk::{
     transport,
 };
 
+use crate::utils::{create_mint, liquidity};
+
+use super::get_account;
+
+#[derive(Debug)]
 pub struct MarketInfo {
     pub market: Keypair,
     pub owner: Keypair,
@@ -40,5 +49,44 @@ impl MarketInfo {
         );
 
         context.banks_client.process_transaction(tx).await
+    }
+
+    pub async fn create_liquidity_token(
+        &self,
+        context: &mut ProgramTestContext,
+    ) -> transport::Result<liquidity::LiquidityInfo> {
+        let liquidity_tokens = self.get_liquidity_tokens(context).await;
+
+        let (market_authority, _) =
+            find_authority_bump_seed(&everlend_lending::id(), &self.market.pubkey());
+
+        let seed = format!("liquidity{:?}", liquidity_tokens);
+        let liquidity_info = liquidity::LiquidityInfo::new(&market_authority, &seed);
+
+        println!("LEN: {:?}", get_packed_len::<Liquidity>());
+
+        create_mint(context, &liquidity_info.token_mint, &self.owner.pubkey())
+            .await
+            .unwrap();
+
+        liquidity_info
+            .create(
+                context,
+                &self.market.pubkey(),
+                &self.owner,
+                &market_authority,
+            )
+            .await
+            .unwrap();
+
+        Ok(liquidity_info)
+    }
+
+    pub async fn get_liquidity_tokens(&self, context: &mut ProgramTestContext) -> u64 {
+        let market_account = get_account(context, &self.market.pubkey()).await;
+        let market = Market::try_from_slice(&market_account.data).unwrap();
+        println!("{:#?}", market);
+
+        market.liquidity_tokens
     }
 }

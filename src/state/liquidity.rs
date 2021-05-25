@@ -41,10 +41,17 @@ pub struct Liquidity {
 }
 
 impl Liquidity {
+    /// LEN
+    pub const LEN: usize = 130;
+
     /// Initialize a market
     pub fn init(&mut self, params: InitLiquidityParams) {
         self.version = PROGRAM_VERSION;
         self.status = LiquidityStatus::InActive;
+        self.market = params.market;
+        self.token_mint = params.token_mint;
+        self.token_account = params.token_account;
+        self.pool_mint = params.pool_mint;
     }
 }
 
