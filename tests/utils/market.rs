@@ -27,6 +27,11 @@ impl MarketInfo {
         }
     }
 
+    pub async fn get_data(&self, context: &mut ProgramTestContext) -> Market {
+        let market_account = get_account(context, &self.market.pubkey()).await;
+        Market::try_from_slice(&market_account.data).unwrap()
+    }
+
     pub async fn init(&self, context: &mut ProgramTestContext) -> transport::Result<()> {
         let rent = context.banks_client.get_rent().await.unwrap();
         let tx = Transaction::new_signed_with_payer(
@@ -53,7 +58,7 @@ impl MarketInfo {
         &self,
         context: &mut ProgramTestContext,
     ) -> transport::Result<liquidity::LiquidityInfo> {
-        let liquidity_tokens = self.get_liquidity_tokens(context).await;
+        let liquidity_tokens = self.get_data(context).await.liquidity_tokens;
 
         let (market_authority, _) =
             find_program_address(&everlend_lending::id(), &self.market.pubkey());
@@ -73,13 +78,5 @@ impl MarketInfo {
             .unwrap();
 
         Ok(liquidity_info)
-    }
-
-    pub async fn get_liquidity_tokens(&self, context: &mut ProgramTestContext) -> u64 {
-        let market_account = get_account(context, &self.market.pubkey()).await;
-        let market = Market::try_from_slice(&market_account.data).unwrap();
-        println!("{:#?}", market);
-
-        market.liquidity_tokens
     }
 }

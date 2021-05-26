@@ -130,6 +130,31 @@ impl Processor {
         Ok(())
     }
 
+    /// Process UpdateLiquidityToken instruction
+    pub fn update_liquidity_token(
+        _program_id: &Pubkey,
+        status: LiquidityStatus,
+        accounts: &[AccountInfo],
+    ) -> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let liquidity_info = next_account_info(account_info_iter)?;
+        let market_owner_info = next_account_info(account_info_iter)?;
+
+        if !market_owner_info.is_signer {
+            return Err(ProgramError::MissingRequiredSignature);
+        }
+
+        // Get liquidity state
+        let mut liquidity = Liquidity::try_from_slice(&liquidity_info.data.borrow())?;
+
+        // Update liquidity state
+        liquidity.status = status;
+
+        liquidity.serialize(&mut *liquidity_info.data.borrow_mut())?;
+
+        Ok(())
+    }
+
     /// Instruction processing router
     pub fn process_instruction(
         program_id: &Pubkey,
@@ -147,6 +172,11 @@ impl Processor {
             LendingInstruction::CreateLiquidityToken => {
                 msg!("LendingInstruction: CreateLiquidityToken");
                 Self::create_liquidity_token(program_id, accounts)
+            }
+
+            LendingInstruction::UpdateLiquidityToken { status } => {
+                msg!("LendingInstruction: UpdateLiquidityToken");
+                Self::update_liquidity_token(program_id, status, accounts)
             }
         }
     }

@@ -2,8 +2,7 @@
 
 mod utils;
 
-use borsh::BorshDeserialize;
-use everlend_lending::state::{Liquidity, LiquidityStatus};
+use everlend_lending::state::LiquidityStatus;
 use solana_program_test::*;
 use utils::*;
 
@@ -20,21 +19,17 @@ async fn setup() -> (ProgramTestContext, market::MarketInfo) {
 async fn success() {
     let (mut context, market_info) = setup().await;
 
-    let liquidity_tokens = market_info.get_liquidity_tokens(&mut context).await;
-    assert_eq!(liquidity_tokens, 0);
+    assert_eq!(market_info.get_data(&mut context).await.liquidity_tokens, 0);
 
     let liquidity_info = market_info
         .create_liquidity_token(&mut context)
         .await
         .unwrap();
 
-    let liquidity_account = get_account(&mut context, &liquidity_info.liquidity_pubkey).await;
-    let liquidity = Liquidity::try_from_slice(&liquidity_account.data).unwrap();
+    let liquidity = liquidity_info.get_data(&mut context).await;
 
     assert_eq!(liquidity.status, LiquidityStatus::InActive);
-
-    let liquidity_tokens = market_info.get_liquidity_tokens(&mut context).await;
-    assert_eq!(liquidity_tokens, 1);
+    assert_eq!(market_info.get_data(&mut context).await.liquidity_tokens, 1);
 }
 
 #[tokio::test]
@@ -51,8 +46,27 @@ async fn two_tokens() {
         .await
         .unwrap();
 
-    let liquidity_tokens = market_info.get_liquidity_tokens(&mut context).await;
-    assert_eq!(liquidity_tokens, 2);
+    assert_eq!(market_info.get_data(&mut context).await.liquidity_tokens, 2);
+}
+
+#[tokio::test]
+async fn update_token() {
+    let (mut context, market_info) = setup().await;
+
+    let liquidity_info = market_info
+        .create_liquidity_token(&mut context)
+        .await
+        .unwrap();
+
+    liquidity_info
+        .update(&mut context, LiquidityStatus::Active, &market_info.owner)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        liquidity_info.get_data(&mut context).await.status,
+        LiquidityStatus::Active
+    );
 }
 
 // TODO: need to add more fail tests

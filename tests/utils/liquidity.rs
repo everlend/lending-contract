@@ -1,3 +1,6 @@
+use super::get_account;
+use borsh::BorshDeserialize;
+use everlend_lending::state::{Liquidity, LiquidityStatus};
 use everlend_lending::{id, instruction};
 use solana_program::{program_pack::Pack, pubkey::Pubkey, system_instruction};
 use solana_program_test::ProgramTestContext;
@@ -23,6 +26,11 @@ impl LiquidityInfo {
             token_account: Keypair::new(),
             pool_mint: Keypair::new(),
         }
+    }
+
+    pub async fn get_data(&self, context: &mut ProgramTestContext) -> Liquidity {
+        let liquidity_account = get_account(context, &self.liquidity_pubkey).await;
+        Liquidity::try_from_slice(&liquidity_account.data).unwrap()
     }
 
     pub async fn create(
@@ -73,6 +81,28 @@ impl LiquidityInfo {
                 &self.pool_mint,
                 &market_owner,
             ],
+            context.last_blockhash,
+        );
+
+        context.banks_client.process_transaction(tx).await
+    }
+
+    pub async fn update(
+        &self,
+        context: &mut ProgramTestContext,
+        status: LiquidityStatus,
+        market_owner: &Keypair,
+    ) -> transport::Result<()> {
+        let tx = Transaction::new_signed_with_payer(
+            &[instruction::update_liquidity_token(
+                &id(),
+                status,
+                &self.liquidity_pubkey,
+                &market_owner.pubkey(),
+            )
+            .unwrap()],
+            Some(&context.payer.pubkey()),
+            &[&context.payer, &market_owner],
             context.last_blockhash,
         );
 

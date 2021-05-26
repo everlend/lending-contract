@@ -6,7 +6,7 @@ use super::*;
 
 /// Liqudiity status
 #[repr(C)]
-#[derive(Debug, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
+#[derive(Clone, Copy, Debug, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
 pub enum LiquidityStatus {
     /// Inactive and invisible
     InActive = 0,

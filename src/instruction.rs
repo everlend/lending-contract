@@ -1,5 +1,6 @@
 //! Instruction types
 
+use crate::{find_program_address, state::LiquidityStatus};
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{
     instruction::{AccountMeta, Instruction},
@@ -7,8 +8,6 @@ use solana_program::{
     pubkey::Pubkey,
     system_program, sysvar,
 };
-
-use crate::find_program_address;
 
 /// Instruction definition
 #[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
@@ -34,6 +33,16 @@ pub enum LendingInstruction {
     /// [R] Rent sysvar
     /// [R] Token program id
     CreateLiquidityToken,
+
+    /// Update liquidity token
+    ///
+    /// Accounts:
+    /// [W] Liquidity account
+    /// [RS] Market owner
+    UpdateLiquidityToken {
+        /// New status for liquidity token
+        status: LiquidityStatus,
+    },
 }
 
 /// Create `InitMarket` instruction
@@ -83,6 +92,28 @@ pub fn create_liquidity_token(
         AccountMeta::new_readonly(sysvar::rent::id(), false),
         AccountMeta::new_readonly(system_program::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
+    ];
+
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts,
+        data,
+    })
+}
+
+/// Create `UpdateLiquidityToken` instruction
+pub fn update_liquidity_token(
+    program_id: &Pubkey,
+    status: LiquidityStatus,
+    liquidity: &Pubkey,
+    market_owner: &Pubkey,
+) -> Result<Instruction, ProgramError> {
+    let init_data = LendingInstruction::UpdateLiquidityToken { status };
+    let data = init_data.try_to_vec()?;
+
+    let accounts = vec![
+        AccountMeta::new(*liquidity, false),
+        AccountMeta::new_readonly(*market_owner, true),
     ];
 
     Ok(Instruction {
