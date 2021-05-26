@@ -9,10 +9,10 @@ use solana_program::{
 
 use super::*;
 
-/// Liqudiity status
+/// Collateral status
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
-pub enum LiquidityStatus {
+pub enum CollateralStatus {
     /// Inactive and invisible
     InActive = 0,
     /// Active
@@ -21,58 +21,49 @@ pub enum LiquidityStatus {
     InActiveAndVisible = 2,
 }
 
-impl Default for LiquidityStatus {
+impl Default for CollateralStatus {
     fn default() -> Self {
-        LiquidityStatus::InActive
+        CollateralStatus::InActive
     }
 }
 
-/// Liquidity
+/// Collateral
 #[repr(C)]
 #[derive(Debug, BorshDeserialize, BorshSerialize, BorshSchema, Default)]
-pub struct Liquidity {
+pub struct Collateral {
     /// State version
     pub version: u8,
     /// Token status
-    pub status: LiquidityStatus,
+    pub status: CollateralStatus,
     /// Market
     pub market: Pubkey,
     /// Supply token mint
     pub token_mint: Pubkey,
     /// Supply token account
     pub token_account: Pubkey,
-    /// Token that lenders will receive
-    pub pool_mint: Pubkey,
+    /// Fractional initial collateralization ratio (multiplied by 10e9)
+    pub ratio_initial: u64,
+    /// Fractional limit for the healthy collateralization ratio (multiplied by 10e9)
+    pub ratio_healthy: u64,
 }
 
-impl Liquidity {
+impl Collateral {
     /// Initialize a collateral
-    pub fn init(&mut self, params: InitLiquidityParams) {
+    pub fn init(&mut self, params: InitCollateralParams) {
         self.version = PROGRAM_VERSION;
-        self.status = LiquidityStatus::InActive;
+        self.status = CollateralStatus::InActive;
         self.market = params.market;
         self.token_mint = params.token_mint;
         self.token_account = params.token_account;
-        self.pool_mint = params.pool_mint;
+        self.ratio_initial = params.ratio_initial;
+        self.ratio_healthy = params.ratio_healthy;
     }
 }
 
-/// Initialize a liquidity params
-pub struct InitLiquidityParams {
-    /// Market
-    pub market: Pubkey,
-    /// Supply token mint
-    pub token_mint: Pubkey,
-    /// Supply token account
-    pub token_account: Pubkey,
-    /// Token that lenders will receive
-    pub pool_mint: Pubkey,
-}
-
-impl Sealed for Liquidity {}
-impl Pack for Liquidity {
-    // 1 + 1 + 32 + 32 + 32 + 32
-    const LEN: usize = 130;
+impl Sealed for Collateral {}
+impl Pack for Collateral {
+    // 1 + 1 + 32 + 32 + 32 + 8 + 8
+    const LEN: usize = 114;
 
     fn pack_into_slice(&self, dst: &mut [u8]) {
         let mut slice = dst;
@@ -87,7 +78,21 @@ impl Pack for Liquidity {
     }
 }
 
-impl IsInitialized for Liquidity {
+/// Initialize a collateral params
+pub struct InitCollateralParams {
+    /// Market
+    pub market: Pubkey,
+    /// Supply token mint
+    pub token_mint: Pubkey,
+    /// Supply token account
+    pub token_account: Pubkey,
+    /// Fractional initial collateralization ratio (multiplied by 10e9)
+    pub ratio_initial: u64,
+    /// Fractional limit for the healthy collateralization ratio (multiplied by 10e9)
+    pub ratio_healthy: u64,
+}
+
+impl IsInitialized for Collateral {
     fn is_initialized(&self) -> bool {
         self.version != UNINITIALIZED_VERSION
     }

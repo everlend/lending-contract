@@ -2,14 +2,15 @@
 
 use crate::{error::LendingError, instruction::LendingInstruction};
 use crate::{find_program_address, state::*};
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshDeserialize;
+use solana_program::program_pack::IsInitialized;
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
     entrypoint::ProgramResult,
     msg,
     program::{invoke, invoke_signed},
     program_error::ProgramError,
-    program_pack::{IsInitialized, Pack},
+    program_pack::Pack,
     pubkey::Pubkey,
     rent::Rent,
     system_instruction,
@@ -40,12 +41,14 @@ impl Processor {
         }
 
         // Get market state
-        let mut market = assert_uninitialized::<Market>(market_info)?;
+        let mut market = Market::unpack_unchecked(&market_info.data.borrow())?;
+        assert_uninitialized(&market)?;
 
         market.init(InitMarketParams {
             owner: *owner_info.key,
         });
-        market.serialize(&mut *market_info.try_borrow_mut_data()?)?;
+
+        Market::pack(market, *market_info.data.borrow_mut())?;
 
         Ok(())
     }
@@ -75,7 +78,7 @@ impl Processor {
         }
 
         // Get market state
-        let mut market = Market::try_from_slice(&market_info.data.borrow())?;
+        let mut market = Market::unpack(&market_info.data.borrow())?;
 
         if market.owner != *market_owner_info.key {
             msg!("Market owner provided does not match owner in the market state");
@@ -84,7 +87,7 @@ impl Processor {
 
         // Create liquidity account
         let seed = format!("liquidity{:?}", market.liquidity_tokens);
-        create_liquidity_account(
+        create_account_with_seed::<Liquidity>(
             program_id,
             market_info.key,
             market_owner_info.clone(),
@@ -95,7 +98,8 @@ impl Processor {
         )?;
 
         // Get liquidity state
-        let mut liquidity = assert_uninitialized::<Liquidity>(liquidity_info)?;
+        let mut liquidity = Liquidity::unpack_unchecked(&liquidity_info.data.borrow())?;
+        assert_uninitialized(&liquidity)?;
 
         let token_mint = Mint::unpack(&token_mint_info.data.borrow())?;
 
@@ -124,8 +128,8 @@ impl Processor {
         });
         market.increment_liquidity_tokens();
 
-        liquidity.serialize(&mut *liquidity_info.data.borrow_mut())?;
-        market.serialize(&mut *market_info.data.borrow_mut())?;
+        Liquidity::pack(liquidity, *liquidity_info.data.borrow_mut())?;
+        Market::pack(market, *market_info.data.borrow_mut())?;
 
         Ok(())
     }
@@ -145,12 +149,88 @@ impl Processor {
         }
 
         // Get liquidity state
-        let mut liquidity = Liquidity::try_from_slice(&liquidity_info.data.borrow())?;
+        let mut liquidity = Liquidity::unpack(&liquidity_info.data.borrow())?;
 
         // Update liquidity state
         liquidity.status = status;
 
-        liquidity.serialize(&mut *liquidity_info.data.borrow_mut())?;
+        Liquidity::pack(liquidity, *liquidity_info.data.borrow_mut())?;
+
+        Ok(())
+    }
+
+    /// Process CreateCollateralToken instruction
+    pub fn create_collateral_token(
+        program_id: &Pubkey,
+        ratio_initial: u64,
+        ratio_healthy: u64,
+        accounts: &[AccountInfo],
+    ) -> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let collateral_info = next_account_info(account_info_iter)?;
+        let token_mint_info = next_account_info(account_info_iter)?;
+        let token_account_info = next_account_info(account_info_iter)?;
+        let market_info = next_account_info(account_info_iter)?;
+        let market_owner_info = next_account_info(account_info_iter)?;
+        let market_authority_info = next_account_info(account_info_iter)?;
+        let rent_info = next_account_info(account_info_iter)?;
+        let _system_program_info = next_account_info(account_info_iter)?;
+        let _token_program_info = next_account_info(account_info_iter)?;
+        let rent = &Rent::from_account_info(rent_info)?;
+
+        if !market_owner_info.is_signer {
+            return Err(ProgramError::MissingRequiredSignature);
+        }
+
+        if market_info.owner != program_id {
+            msg!("Market provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
+        // Get market state
+        let mut market = Market::unpack(&market_info.data.borrow())?;
+
+        if market.owner != *market_owner_info.key {
+            msg!("Market owner provided does not match owner in the market state");
+            return Err(ProgramError::InvalidArgument.into());
+        }
+
+        // Create collateral account
+        let seed = format!("collateral{:?}", market.collateral_tokens);
+        create_account_with_seed::<Collateral>(
+            program_id,
+            market_info.key,
+            market_owner_info.clone(),
+            collateral_info.clone(),
+            market_authority_info.clone(),
+            &seed,
+            rent,
+        )?;
+
+        // Get collateral state
+        let mut collateral = Collateral::unpack_unchecked(&collateral_info.data.borrow())?;
+        assert_uninitialized(&collateral)?;
+
+        // Initialize token account for spl token
+        spl_initialize_account(
+            token_account_info.clone(),
+            token_mint_info.clone(),
+            market_authority_info.clone(),
+            rent_info.clone(),
+        )?;
+
+        // Update collateral state & increment collateral tokens counter
+        collateral.init(InitCollateralParams {
+            market: *market_info.key,
+            token_mint: *token_mint_info.key,
+            token_account: *token_account_info.key,
+            ratio_initial,
+            ratio_healthy,
+        });
+        market.increment_collateral_tokens();
+
+        Collateral::pack(collateral, *collateral_info.data.borrow_mut())?;
+        Market::pack(market, *market_info.data.borrow_mut())?;
 
         Ok(())
     }
@@ -178,12 +258,20 @@ impl Processor {
                 msg!("LendingInstruction: UpdateLiquidityToken");
                 Self::update_liquidity_token(program_id, status, accounts)
             }
+
+            LendingInstruction::CreateCollateralToken {
+                ratio_initial,
+                ratio_healthy,
+            } => {
+                msg!("LendingInstruction: CreateCollateralToken");
+                Self::create_collateral_token(program_id, ratio_initial, ratio_healthy, accounts)
+            }
         }
     }
 }
 
 /// Create account with seed
-pub fn create_liquidity_account<'a>(
+pub fn create_account_with_seed<'a, S: Pack>(
     program_id: &Pubkey,
     market: &Pubkey,
     from: AccountInfo<'a>,
@@ -199,8 +287,8 @@ pub fn create_liquidity_account<'a>(
         return Err(ProgramError::InvalidSeeds);
     }
 
-    let generated_liquidity_pubkey = Pubkey::create_with_seed(&base.key, seed, program_id)?;
-    if generated_liquidity_pubkey != *to.key {
+    let generated_pubkey = Pubkey::create_with_seed(&base.key, seed, program_id)?;
+    if generated_pubkey != *to.key {
         return Err(ProgramError::InvalidSeeds);
     }
 
@@ -209,8 +297,8 @@ pub fn create_liquidity_account<'a>(
         to.key,
         &base.key,
         seed,
-        rent.minimum_balance(Liquidity::LEN),
-        Liquidity::LEN as u64,
+        rent.minimum_balance(S::LEN),
+        S::LEN as u64,
         program_id,
     );
 
@@ -261,13 +349,10 @@ fn assert_rent_exempt(rent: &Rent, account_info: &AccountInfo) -> ProgramResult 
     }
 }
 
-fn assert_uninitialized<T: BorshDeserialize + IsInitialized>(
-    account_info: &AccountInfo,
-) -> Result<T, ProgramError> {
-    let account: T = T::try_from_slice(&account_info.data.borrow())?;
+fn assert_uninitialized<T: IsInitialized>(account: &T) -> ProgramResult {
     if account.is_initialized() {
         Err(ProgramError::AccountAlreadyInitialized.into())
     } else {
-        Ok(account)
+        Ok(())
     }
 }

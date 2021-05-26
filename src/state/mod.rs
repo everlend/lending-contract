@@ -1,8 +1,10 @@
 //! State types
 
+mod collateral;
 mod liquidity;
 mod market;
 
+pub use collateral::*;
 pub use liquidity::*;
 pub use market::*;
 

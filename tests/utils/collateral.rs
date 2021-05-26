@@ -1,5 +1,5 @@
 use super::get_account;
-use everlend_lending::state::{Liquidity, LiquidityStatus};
+use everlend_lending::state::Collateral;
 use everlend_lending::{id, instruction};
 use solana_program::{program_pack::Pack, pubkey::Pubkey, system_instruction};
 use solana_program_test::ProgramTestContext;
@@ -9,27 +9,28 @@ use solana_sdk::{
     transport,
 };
 
+pub const RATIO_INITIAL: u64 = 50 * u64::pow(10, 9);
+pub const RATIO_HEALTHY: u64 = 75 * u64::pow(10, 9);
+
 #[derive(Debug)]
-pub struct LiquidityInfo {
-    pub liquidity_pubkey: Pubkey,
+pub struct CollateralInfo {
+    pub collateral_pubkey: Pubkey,
     pub token_mint: Keypair,
     pub token_account: Keypair,
-    pub pool_mint: Keypair,
 }
 
-impl LiquidityInfo {
+impl CollateralInfo {
     pub fn new(base: &Pubkey, seed: &str) -> Self {
         Self {
-            liquidity_pubkey: Pubkey::create_with_seed(base, seed, &id()).unwrap(),
+            collateral_pubkey: Pubkey::create_with_seed(base, seed, &id()).unwrap(),
             token_mint: Keypair::new(),
             token_account: Keypair::new(),
-            pool_mint: Keypair::new(),
         }
     }
 
-    pub async fn get_data(&self, context: &mut ProgramTestContext) -> Liquidity {
-        let liquidity_account = get_account(context, &self.liquidity_pubkey).await;
-        Liquidity::unpack_unchecked(&liquidity_account.data).unwrap()
+    pub async fn get_data(&self, context: &mut ProgramTestContext) -> Collateral {
+        let collateral_account = get_account(context, &self.collateral_pubkey).await;
+        Collateral::unpack_unchecked(&collateral_account.data).unwrap()
     }
 
     pub async fn create(
@@ -55,53 +56,20 @@ impl LiquidityInfo {
                     spl_token::state::Account::LEN as u64,
                     &spl_token::id(),
                 ),
-                system_instruction::create_account(
-                    &context.payer.pubkey(),
-                    &self.pool_mint.pubkey(),
-                    rent.minimum_balance(spl_token::state::Mint::LEN),
-                    spl_token::state::Mint::LEN as u64,
-                    &spl_token::id(),
-                ),
-                instruction::create_liquidity_token(
+                instruction::create_collateral_token(
                     &id(),
-                    &self.liquidity_pubkey,
+                    RATIO_INITIAL,
+                    RATIO_HEALTHY,
+                    &self.collateral_pubkey,
                     &self.token_mint.pubkey(),
                     &self.token_account.pubkey(),
-                    &self.pool_mint.pubkey(),
                     &market_pubkey,
                     &market_owner.pubkey(),
                 )
                 .unwrap(),
             ],
             Some(&context.payer.pubkey()),
-            &[
-                &context.payer,
-                &self.token_account,
-                &self.pool_mint,
-                &market_owner,
-            ],
-            context.last_blockhash,
-        );
-
-        context.banks_client.process_transaction(tx).await
-    }
-
-    pub async fn update(
-        &self,
-        context: &mut ProgramTestContext,
-        status: LiquidityStatus,
-        market_owner: &Keypair,
-    ) -> transport::Result<()> {
-        let tx = Transaction::new_signed_with_payer(
-            &[instruction::update_liquidity_token(
-                &id(),
-                status,
-                &self.liquidity_pubkey,
-                &market_owner.pubkey(),
-            )
-            .unwrap()],
-            Some(&context.payer.pubkey()),
-            &[&context.payer, &market_owner],
+            &[&context.payer, &self.token_account, &market_owner],
             context.last_blockhash,
         );
 

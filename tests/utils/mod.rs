@@ -7,6 +7,7 @@ use solana_program_test::*;
 use solana_sdk::{account::Account, signature::Keypair};
 use solana_sdk::{pubkey::Pubkey, signer::Signer, transaction::Transaction, transport};
 
+pub mod collateral;
 pub mod liquidity;
 pub mod market;
 

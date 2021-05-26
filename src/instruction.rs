@@ -43,6 +43,24 @@ pub enum LendingInstruction {
         /// New status for liquidity token
         status: LiquidityStatus,
     },
+
+    /// Create collateral token
+    ///
+    /// Accounts:
+    /// [W] Collateral account to create - uninitialized.
+    /// [R] Token mint account
+    /// [W] Token account - uninitialized.
+    /// [W] Market account
+    /// [RS] Market owner
+    /// [R] Market authority
+    /// [R] Rent sysvar
+    /// [R] Token program id
+    CreateCollateralToken {
+        /// Fractional initial collateralization ratio (multiplied by 10e9)
+        ratio_initial: u64,
+        /// Fractional limit for the healthy collateralization ratio (multiplied by 10e9)
+        ratio_healthy: u64,
+    },
 }
 
 /// Create `InitMarket` instruction
@@ -114,6 +132,43 @@ pub fn update_liquidity_token(
     let accounts = vec![
         AccountMeta::new(*liquidity, false),
         AccountMeta::new_readonly(*market_owner, true),
+    ];
+
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts,
+        data,
+    })
+}
+
+/// Create `CreateCollateralToken` instruction
+pub fn create_collateral_token(
+    program_id: &Pubkey,
+    ratio_initial: u64,
+    ratio_healthy: u64,
+    collateral: &Pubkey,
+    token_mint: &Pubkey,
+    token_account: &Pubkey,
+    market: &Pubkey,
+    market_owner: &Pubkey,
+) -> Result<Instruction, ProgramError> {
+    let init_data = LendingInstruction::CreateCollateralToken {
+        ratio_initial,
+        ratio_healthy,
+    };
+    let data = init_data.try_to_vec()?;
+    let (market_authority, _) = find_program_address(program_id, market);
+
+    let accounts = vec![
+        AccountMeta::new(*collateral, false),
+        AccountMeta::new_readonly(*token_mint, false),
+        AccountMeta::new(*token_account, false),
+        AccountMeta::new(*market, false),
+        AccountMeta::new_readonly(*market_owner, true),
+        AccountMeta::new_readonly(market_authority, false),
+        AccountMeta::new_readonly(sysvar::rent::id(), false),
+        AccountMeta::new_readonly(system_program::id(), false),
+        AccountMeta::new_readonly(spl_token::id(), false),
     ];
 
     Ok(Instruction {

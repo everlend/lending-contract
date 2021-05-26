@@ -1,11 +1,7 @@
-use super::get_account;
+use super::{collateral, get_account};
 use crate::utils::{create_mint, liquidity};
-use borsh::BorshDeserialize;
-use everlend_lending::{
-    find_program_address, id, instruction,
-    state::{Liquidity, Market},
-};
-use solana_program::{borsh::get_packed_len, system_instruction};
+use everlend_lending::{find_program_address, id, instruction, state::Market};
+use solana_program::{borsh::get_packed_len, program_pack::Pack, system_instruction};
 use solana_program_test::ProgramTestContext;
 use solana_sdk::transaction::Transaction;
 use solana_sdk::{
@@ -29,7 +25,7 @@ impl MarketInfo {
 
     pub async fn get_data(&self, context: &mut ProgramTestContext) -> Market {
         let market_account = get_account(context, &self.market.pubkey()).await;
-        Market::try_from_slice(&market_account.data).unwrap()
+        Market::unpack_unchecked(&market_account.data).unwrap()
     }
 
     pub async fn init(&self, context: &mut ProgramTestContext) -> transport::Result<()> {
@@ -66,8 +62,6 @@ impl MarketInfo {
         let seed = format!("liquidity{:?}", liquidity_tokens);
         let liquidity_info = liquidity::LiquidityInfo::new(&market_authority, &seed);
 
-        println!("LEN: {:?}", get_packed_len::<Liquidity>());
-
         create_mint(context, &liquidity_info.token_mint, &self.owner.pubkey())
             .await
             .unwrap();
@@ -78,5 +72,29 @@ impl MarketInfo {
             .unwrap();
 
         Ok(liquidity_info)
+    }
+
+    pub async fn create_collateral_token(
+        &self,
+        context: &mut ProgramTestContext,
+    ) -> transport::Result<collateral::CollateralInfo> {
+        let collateral_tokens = self.get_data(context).await.collateral_tokens;
+
+        let (market_authority, _) =
+            find_program_address(&everlend_lending::id(), &self.market.pubkey());
+
+        let seed = format!("collateral{:?}", collateral_tokens);
+        let collateral_info = collateral::CollateralInfo::new(&market_authority, &seed);
+
+        create_mint(context, &collateral_info.token_mint, &self.owner.pubkey())
+            .await
+            .unwrap();
+
+        collateral_info
+            .create(context, &self.market.pubkey(), &self.owner)
+            .await
+            .unwrap();
+
+        Ok(collateral_info)
     }
 }
