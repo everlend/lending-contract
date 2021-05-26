@@ -1,6 +1,7 @@
 use super::{collateral, get_account};
 use crate::utils::{create_mint, liquidity};
 use everlend_lending::{find_program_address, id, instruction, state::Market};
+use solana_program::pubkey::Pubkey;
 use solana_program::{borsh::get_packed_len, program_pack::Pack, system_instruction};
 use solana_program_test::ProgramTestContext;
 use solana_sdk::transaction::Transaction;
@@ -96,5 +97,35 @@ impl MarketInfo {
             .unwrap();
 
         Ok(collateral_info)
+    }
+
+    pub async fn deposit(
+        &self,
+        context: &mut ProgramTestContext,
+        liquidity_info: &liquidity::LiquidityInfo,
+        source: &Pubkey,
+        destination: &Pubkey,
+        amount: u64,
+        provider: &Keypair,
+    ) -> transport::Result<()> {
+        let tx = Transaction::new_signed_with_payer(
+            &[instruction::deposit(
+                &id(),
+                amount,
+                &liquidity_info.liquidity_pubkey,
+                source,
+                destination,
+                &liquidity_info.token_account.pubkey(),
+                &liquidity_info.pool_mint.pubkey(),
+                &self.market.pubkey(),
+                &provider.pubkey(),
+            )
+            .unwrap()],
+            Some(&context.payer.pubkey()),
+            &[&context.payer, &provider],
+            context.last_blockhash,
+        );
+
+        context.banks_client.process_transaction(tx).await
     }
 }

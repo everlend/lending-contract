@@ -26,10 +26,10 @@ pub enum LendingInstruction {
     /// Create liquidity token
     ///
     /// Accounts:
-    /// [W] Liquidity account to create - uninitialized.
+    /// [W] Liquidity account to create - uninitialized
     /// [R] Token mint account
-    /// [W] Token account - uninitialized.
-    /// [W] Pool mint account - uninitialized.
+    /// [W] Token account - uninitialized
+    /// [W] Pool mint account - uninitialized
     /// [W] Market account
     /// [RS] Market owner
     /// [R] Market authority
@@ -50,9 +50,9 @@ pub enum LendingInstruction {
     /// Create collateral token
     ///
     /// Accounts:
-    /// [W] Collateral account to create - uninitialized.
+    /// [W] Collateral account to create - uninitialized
     /// [R] Token mint account
-    /// [W] Token account - uninitialized.
+    /// [W] Token account - uninitialized
     /// [W] Market account
     /// [RS] Market owner
     /// [R] Market authority
@@ -77,6 +77,23 @@ pub enum LendingInstruction {
         ratio_initial: u64,
         /// Fractional limit for the healthy collateralization ratio (multiplied by 10e9)
         ratio_healthy: u64,
+    },
+
+    /// Deposit liquidity
+    ///
+    /// Accounts:
+    /// [R] Liquidity account
+    /// [W] Source provider account
+    /// [W] Destination provider account
+    /// [W] Token account
+    /// [W] Pool mint account
+    /// [R] Market account
+    /// [R] Market authority
+    /// [S] User transfer authority
+    /// [R] Token program id
+    Deposit {
+        /// Amount of liquidity to deposit
+        amount: u64,
     },
 }
 
@@ -214,6 +231,41 @@ pub fn update_collateral_token(
     let accounts = vec![
         AccountMeta::new(*collateral, false),
         AccountMeta::new_readonly(*market_owner, true),
+    ];
+
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts,
+        data,
+    })
+}
+
+/// Create `Deposit` instruction
+pub fn deposit(
+    program_id: &Pubkey,
+    amount: u64,
+    liquidity: &Pubkey,
+    source: &Pubkey,
+    destination: &Pubkey,
+    token_account: &Pubkey,
+    pool_mint: &Pubkey,
+    market: &Pubkey,
+    user_transfer_authority: &Pubkey,
+) -> Result<Instruction, ProgramError> {
+    let init_data = LendingInstruction::Deposit { amount };
+    let data = init_data.try_to_vec()?;
+    let (market_authority, _) = find_program_address(program_id, market);
+
+    let accounts = vec![
+        AccountMeta::new_readonly(*liquidity, false),
+        AccountMeta::new(*source, false),
+        AccountMeta::new(*destination, false),
+        AccountMeta::new(*token_account, false),
+        AccountMeta::new(*pool_mint, false),
+        AccountMeta::new_readonly(*market, false),
+        AccountMeta::new_readonly(market_authority, false),
+        AccountMeta::new_readonly(*user_transfer_authority, true),
+        AccountMeta::new_readonly(spl_token::id(), false),
     ];
 
     Ok(Instruction {
