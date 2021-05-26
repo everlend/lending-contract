@@ -1,0 +1,99 @@
+//! Program state definitions
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use solana_program::{
+    msg,
+    program_error::ProgramError,
+    program_pack::{IsInitialized, Pack, Sealed},
+    pubkey::Pubkey,
+};
+
+use super::*;
+
+/// Collateral status
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
+pub enum CollateralStatus {
+    /// Inactive and invisible
+    InActive = 0,
+    /// Active
+    Active = 1,
+    /// Inactive but visible
+    InActiveAndVisible = 2,
+}
+
+impl Default for CollateralStatus {
+    fn default() -> Self {
+        CollateralStatus::InActive
+    }
+}
+
+/// Collateral
+#[repr(C)]
+#[derive(Debug, BorshDeserialize, BorshSerialize, BorshSchema, Default)]
+pub struct Collateral {
+    /// State version
+    pub version: u8,
+    /// Token status
+    pub status: CollateralStatus,
+    /// Market
+    pub market: Pubkey,
+    /// Supply token mint
+    pub token_mint: Pubkey,
+    /// Supply token account
+    pub token_account: Pubkey,
+    /// Fractional initial collateralization ratio (multiplied by 10e9)
+    pub ratio_initial: u64,
+    /// Fractional limit for the healthy collateralization ratio (multiplied by 10e9)
+    pub ratio_healthy: u64,
+}
+
+impl Collateral {
+    /// Initialize a collateral
+    pub fn init(&mut self, params: InitCollateralParams) {
+        self.version = PROGRAM_VERSION;
+        self.status = CollateralStatus::InActive;
+        self.market = params.market;
+        self.token_mint = params.token_mint;
+        self.token_account = params.token_account;
+        self.ratio_initial = params.ratio_initial;
+        self.ratio_healthy = params.ratio_healthy;
+    }
+}
+
+impl Sealed for Collateral {}
+impl Pack for Collateral {
+    // 1 + 1 + 32 + 32 + 32 + 8 + 8
+    const LEN: usize = 114;
+
+    fn pack_into_slice(&self, dst: &mut [u8]) {
+        let mut slice = dst;
+        self.serialize(&mut slice).unwrap()
+    }
+
+    fn unpack_from_slice(src: &[u8]) -> Result<Self, solana_program::program_error::ProgramError> {
+        Self::try_from_slice(src).map_err(|_| {
+            msg!("Failed to deserialize");
+            ProgramError::InvalidAccountData
+        })
+    }
+}
+
+/// Initialize a collateral params
+pub struct InitCollateralParams {
+    /// Market
+    pub market: Pubkey,
+    /// Supply token mint
+    pub token_mint: Pubkey,
+    /// Supply token account
+    pub token_account: Pubkey,
+    /// Fractional initial collateralization ratio (multiplied by 10e9)
+    pub ratio_initial: u64,
+    /// Fractional limit for the healthy collateralization ratio (multiplied by 10e9)
+    pub ratio_healthy: u64,
+}
+
+impl IsInitialized for Collateral {
+    fn is_initialized(&self) -> bool {
+        self.version != UNINITIALIZED_VERSION
+    }
+}
