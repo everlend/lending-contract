@@ -1,7 +1,7 @@
 //! Program state processor
 
 use crate::{error::LendingError, instruction::LendingInstruction};
-use crate::{find_authority_bump_seed, state::*};
+use crate::{find_program_address, state::*};
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
@@ -34,12 +34,13 @@ impl Processor {
 
         assert_rent_exempt(rent, market_info)?;
 
-        // Get market state
-        let mut market = assert_uninitialized::<Market>(market_info)?;
         if market_info.owner != program_id {
             msg!("Market provided is not owned by the market program");
             return Err(LendingError::InvalidAccountOwner.into());
         }
+
+        // Get market state
+        let mut market = assert_uninitialized::<Market>(market_info)?;
 
         market.init(InitMarketParams {
             owner: *owner_info.key,
@@ -64,11 +65,21 @@ impl Processor {
         let _token_program_info = next_account_info(account_info_iter)?;
         let rent = &Rent::from_account_info(rent_info)?;
 
-        // Get market state
-        let mut market = Market::try_from_slice(&market_info.data.borrow())?;
+        if !market_owner_info.is_signer {
+            return Err(ProgramError::MissingRequiredSignature);
+        }
+
         if market_info.owner != program_id {
             msg!("Market provided is not owned by the market program");
             return Err(LendingError::InvalidAccountOwner.into());
+        }
+
+        // Get market state
+        let mut market = Market::try_from_slice(&market_info.data.borrow())?;
+
+        if market.owner != *market_owner_info.key {
+            msg!("Market owner provided does not match owner in the market state");
+            return Err(ProgramError::InvalidArgument.into());
         }
 
         // Create liquidity account
@@ -80,16 +91,11 @@ impl Processor {
             liquidity_info.clone(),
             market_authority_info.clone(),
             &seed,
-            rent.minimum_balance(Liquidity::LEN),
-            Liquidity::LEN as u64,
+            rent,
         )?;
 
         // Get liquidity state
         let mut liquidity = assert_uninitialized::<Liquidity>(liquidity_info)?;
-        if liquidity_info.owner != program_id {
-            msg!("Liquidity provided is not owned by the market program");
-            return Err(LendingError::InvalidAccountOwner.into());
-        }
 
         let token_mint = Mint::unpack(&token_mint_info.data.borrow())?;
 
@@ -97,14 +103,14 @@ impl Processor {
         spl_initialize_account(
             token_account_info.clone(),
             token_mint_info.clone(),
-            market_owner_info.clone(),
+            market_authority_info.clone(),
             rent_info.clone(),
         )?;
 
         // Initialize mint (token) for pool
         spl_initialize_mint(
             pool_mint_info.clone(),
-            market_owner_info.clone(),
+            market_authority_info.clone(),
             rent_info.clone(),
             token_mint.decimals,
         )?;
@@ -154,10 +160,9 @@ pub fn create_liquidity_account<'a>(
     to: AccountInfo<'a>,
     base: AccountInfo<'a>,
     seed: &str,
-    lamports: u64,
-    space: u64,
+    rent: &Rent,
 ) -> ProgramResult {
-    let (authority, bump_seed) = find_authority_bump_seed(program_id, market);
+    let (authority, bump_seed) = find_program_address(program_id, market);
     let signature = &[&market.to_bytes()[..32], &[bump_seed]];
 
     if authority != *base.key {
@@ -170,7 +175,13 @@ pub fn create_liquidity_account<'a>(
     }
 
     let ix = system_instruction::create_account_with_seed(
-        from.key, to.key, &base.key, seed, lamports, space, program_id,
+        from.key,
+        to.key,
+        &base.key,
+        seed,
+        rent.minimum_balance(Liquidity::LEN),
+        Liquidity::LEN as u64,
+        program_id,
     );
 
     invoke_signed(&ix, &[from, to, base], &[signature])

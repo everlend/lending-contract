@@ -30,7 +30,6 @@ impl LiquidityInfo {
         context: &mut ProgramTestContext,
         market_pubkey: &Pubkey,
         market_owner: &Keypair,
-        market_authority: &Pubkey,
     ) -> transport::Result<()> {
         let rent = context.banks_client.get_rent().await.unwrap();
 
@@ -64,7 +63,6 @@ impl LiquidityInfo {
                     &self.pool_mint.pubkey(),
                     &market_pubkey,
                     &market_owner.pubkey(),
-                    &market_authority,
                 )
                 .unwrap(),
             ],

@@ -1,6 +1,8 @@
+use super::get_account;
+use crate::utils::{create_mint, liquidity};
 use borsh::BorshDeserialize;
 use everlend_lending::{
-    find_authority_bump_seed, id, instruction,
+    find_program_address, id, instruction,
     state::{Liquidity, Market},
 };
 use solana_program::{borsh::get_packed_len, system_instruction};
@@ -10,10 +12,6 @@ use solana_sdk::{
     signature::{Keypair, Signer},
     transport,
 };
-
-use crate::utils::{create_mint, liquidity};
-
-use super::get_account;
 
 #[derive(Debug)]
 pub struct MarketInfo {
@@ -58,7 +56,7 @@ impl MarketInfo {
         let liquidity_tokens = self.get_liquidity_tokens(context).await;
 
         let (market_authority, _) =
-            find_authority_bump_seed(&everlend_lending::id(), &self.market.pubkey());
+            find_program_address(&everlend_lending::id(), &self.market.pubkey());
 
         let seed = format!("liquidity{:?}", liquidity_tokens);
         let liquidity_info = liquidity::LiquidityInfo::new(&market_authority, &seed);
@@ -70,12 +68,7 @@ impl MarketInfo {
             .unwrap();
 
         liquidity_info
-            .create(
-                context,
-                &self.market.pubkey(),
-                &self.owner,
-                &market_authority,
-            )
+            .create(context, &self.market.pubkey(), &self.owner)
             .await
             .unwrap();
 

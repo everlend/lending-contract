@@ -8,6 +8,8 @@ use solana_program::{
     system_program, sysvar,
 };
 
+use crate::find_program_address;
+
 /// Instruction definition
 #[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
 pub enum LendingInstruction {
@@ -27,7 +29,7 @@ pub enum LendingInstruction {
     /// [W] Token account - uninitialized.
     /// [W] Pool mint account - uninitialized.
     /// [W] Market account
-    /// [WS] Market owner
+    /// [RS] Market owner
     /// [R] Market authority
     /// [R] Rent sysvar
     /// [R] Token program id
@@ -42,6 +44,7 @@ pub fn init_market(
 ) -> Result<Instruction, ProgramError> {
     let init_data = LendingInstruction::InitMarket;
     let data = init_data.try_to_vec()?;
+
     let accounts = vec![
         AccountMeta::new(*market, false),
         AccountMeta::new_readonly(*owner, true),
@@ -64,18 +67,19 @@ pub fn create_liquidity_token(
     pool_mint: &Pubkey,
     market: &Pubkey,
     market_owner: &Pubkey,
-    market_authority: &Pubkey,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LendingInstruction::CreateLiquidityToken;
     let data = init_data.try_to_vec()?;
+    let (market_authority, _) = find_program_address(program_id, market);
+
     let accounts = vec![
         AccountMeta::new(*liquidity, false),
         AccountMeta::new_readonly(*token_mint, false),
         AccountMeta::new(*token_account, false),
         AccountMeta::new(*pool_mint, false),
         AccountMeta::new(*market, false),
-        AccountMeta::new(*market_owner, true),
-        AccountMeta::new_readonly(*market_authority, false),
+        AccountMeta::new_readonly(*market_owner, true),
+        AccountMeta::new_readonly(market_authority, false),
         AccountMeta::new_readonly(sysvar::rent::id(), false),
         AccountMeta::new_readonly(system_program::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
