@@ -1,6 +1,9 @@
 //! Instruction types
 
-use crate::{find_program_address, state::LiquidityStatus};
+use crate::{
+    find_program_address,
+    state::{CollateralStatus, LiquidityStatus},
+};
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{
     instruction::{AccountMeta, Instruction},
@@ -56,6 +59,20 @@ pub enum LendingInstruction {
     /// [R] Rent sysvar
     /// [R] Token program id
     CreateCollateralToken {
+        /// Fractional initial collateralization ratio (multiplied by 10e9)
+        ratio_initial: u64,
+        /// Fractional limit for the healthy collateralization ratio (multiplied by 10e9)
+        ratio_healthy: u64,
+    },
+
+    /// Update collateral token
+    ///
+    /// Accounts:
+    /// [W] Collateral account
+    /// [RS] Market owner
+    UpdateCollateralToken {
+        /// New status for collateral token
+        status: CollateralStatus,
         /// Fractional initial collateralization ratio (multiplied by 10e9)
         ratio_initial: u64,
         /// Fractional limit for the healthy collateralization ratio (multiplied by 10e9)
@@ -169,6 +186,34 @@ pub fn create_collateral_token(
         AccountMeta::new_readonly(sysvar::rent::id(), false),
         AccountMeta::new_readonly(system_program::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
+    ];
+
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts,
+        data,
+    })
+}
+
+/// Create `UpdateCollateralToken` instruction
+pub fn update_collateral_token(
+    program_id: &Pubkey,
+    status: CollateralStatus,
+    ratio_initial: u64,
+    ratio_healthy: u64,
+    collateral: &Pubkey,
+    market_owner: &Pubkey,
+) -> Result<Instruction, ProgramError> {
+    let init_data = LendingInstruction::UpdateCollateralToken {
+        status,
+        ratio_initial,
+        ratio_healthy,
+    };
+    let data = init_data.try_to_vec()?;
+
+    let accounts = vec![
+        AccountMeta::new(*collateral, false),
+        AccountMeta::new_readonly(*market_owner, true),
     ];
 
     Ok(Instruction {

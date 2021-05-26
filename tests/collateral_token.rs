@@ -60,6 +60,40 @@ async fn two_tokens() {
 }
 
 #[tokio::test]
-async fn update_token() {}
+async fn update_token() {
+    let (mut context, market_info) = setup().await;
+
+    let collateral_info = market_info
+        .create_collateral_token(&mut context)
+        .await
+        .unwrap();
+
+    const NEW_RATIO_INITIAL: u64 = 35 * u64::pow(10, 9);
+    const NEW_RATIO_HEALTHY: u64 = 60 * u64::pow(10, 9);
+
+    collateral_info
+        .update(
+            &mut context,
+            CollateralStatus::Active,
+            NEW_RATIO_INITIAL,
+            NEW_RATIO_HEALTHY,
+            &market_info.owner,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        collateral_info.get_data(&mut context).await.status,
+        CollateralStatus::Active
+    );
+    assert_eq!(
+        collateral_info.get_data(&mut context).await.ratio_initial,
+        NEW_RATIO_INITIAL
+    );
+    assert_eq!(
+        collateral_info.get_data(&mut context).await.ratio_healthy,
+        NEW_RATIO_HEALTHY
+    );
+}
 
 // TODO: need to add more fail tests

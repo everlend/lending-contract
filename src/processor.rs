@@ -235,6 +235,35 @@ impl Processor {
         Ok(())
     }
 
+    /// Process UpdateCollateralToken instruction
+    pub fn update_collateral_token(
+        _program_id: &Pubkey,
+        status: CollateralStatus,
+        ratio_initial: u64,
+        ratio_healthy: u64,
+        accounts: &[AccountInfo],
+    ) -> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let collateral_info = next_account_info(account_info_iter)?;
+        let market_owner_info = next_account_info(account_info_iter)?;
+
+        if !market_owner_info.is_signer {
+            return Err(ProgramError::MissingRequiredSignature);
+        }
+
+        // Get collateral state
+        let mut collateral = Collateral::unpack(&collateral_info.data.borrow())?;
+
+        // Update collateral state
+        collateral.status = status;
+        collateral.ratio_initial = ratio_initial;
+        collateral.ratio_healthy = ratio_healthy;
+
+        Collateral::pack(collateral, *collateral_info.data.borrow_mut())?;
+
+        Ok(())
+    }
+
     /// Instruction processing router
     pub fn process_instruction(
         program_id: &Pubkey,
@@ -265,6 +294,21 @@ impl Processor {
             } => {
                 msg!("LendingInstruction: CreateCollateralToken");
                 Self::create_collateral_token(program_id, ratio_initial, ratio_healthy, accounts)
+            }
+
+            LendingInstruction::UpdateCollateralToken {
+                status,
+                ratio_initial,
+                ratio_healthy,
+            } => {
+                msg!("LendingInstruction: UpdateCollateralToken");
+                Self::update_collateral_token(
+                    program_id,
+                    status,
+                    ratio_initial,
+                    ratio_healthy,
+                    accounts,
+                )
             }
         }
     }

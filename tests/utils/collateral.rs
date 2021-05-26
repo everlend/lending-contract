@@ -1,5 +1,5 @@
 use super::get_account;
-use everlend_lending::state::Collateral;
+use everlend_lending::state::{Collateral, CollateralStatus};
 use everlend_lending::{id, instruction};
 use solana_program::{program_pack::Pack, pubkey::Pubkey, system_instruction};
 use solana_program_test::ProgramTestContext;
@@ -70,6 +70,32 @@ impl CollateralInfo {
             ],
             Some(&context.payer.pubkey()),
             &[&context.payer, &self.token_account, &market_owner],
+            context.last_blockhash,
+        );
+
+        context.banks_client.process_transaction(tx).await
+    }
+
+    pub async fn update(
+        &self,
+        context: &mut ProgramTestContext,
+        status: CollateralStatus,
+        ratio_initial: u64,
+        ratio_healthy: u64,
+        market_owner: &Keypair,
+    ) -> transport::Result<()> {
+        let tx = Transaction::new_signed_with_payer(
+            &[instruction::update_collateral_token(
+                &id(),
+                status,
+                ratio_initial,
+                ratio_healthy,
+                &self.collateral_pubkey,
+                &market_owner.pubkey(),
+            )
+            .unwrap()],
+            Some(&context.payer.pubkey()),
+            &[&context.payer, &market_owner],
             context.last_blockhash,
         );
 
