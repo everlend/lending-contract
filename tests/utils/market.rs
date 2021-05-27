@@ -128,4 +128,34 @@ impl MarketInfo {
 
         context.banks_client.process_transaction(tx).await
     }
+
+    pub async fn withdraw(
+        &self,
+        context: &mut ProgramTestContext,
+        liquidity_info: &liquidity::LiquidityInfo,
+        source: &Pubkey,
+        destination: &Pubkey,
+        amount: u64,
+        provider: &Keypair,
+    ) -> transport::Result<()> {
+        let tx = Transaction::new_signed_with_payer(
+            &[instruction::withdraw(
+                &id(),
+                amount,
+                &liquidity_info.liquidity_pubkey,
+                source,
+                destination,
+                &liquidity_info.token_account.pubkey(),
+                &liquidity_info.pool_mint.pubkey(),
+                &self.market.pubkey(),
+                &provider.pubkey(),
+            )
+            .unwrap()],
+            Some(&context.payer.pubkey()),
+            &[&context.payer, &provider],
+            context.last_blockhash,
+        );
+
+        context.banks_client.process_transaction(tx).await
+    }
 }

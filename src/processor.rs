@@ -17,7 +17,6 @@ use solana_program::{
     sysvar::Sysvar,
 };
 use spl_token::state::{Account, Mint};
-use std::ops::Div;
 
 /// Program state handler.
 pub struct Processor {}
@@ -296,15 +295,12 @@ impl Processor {
             return Err(ProgramError::InvalidArgument.into());
         }
 
-        // Compute amount to mint before transfers
+        // TODO: We can store total values in the liquidity state
         let token_account_amount =
             Account::unpack_unchecked(&token_account_info.data.borrow())?.amount;
         let pool_mint_supply = Mint::unpack_unchecked(&pool_mint_info.data.borrow())?.supply;
-        let amount_to_mint = if pool_mint_supply == 0 || token_account_amount == 0 {
-            amount
-        } else {
-            amount * pool_mint_supply.div(token_account_amount)
-        };
+        let deposit_exchange_rate =
+            liquidity.deposit_exchange_rate(token_account_amount, pool_mint_supply);
 
         // Transfer liquidity from source provider to token account
         spl_token_transfer(
@@ -323,7 +319,68 @@ impl Processor {
             pool_mint_info.clone(),
             destination_info.clone(),
             market_authority_info.clone(),
-            amount_to_mint,
+            amount * deposit_exchange_rate,
+            &[signers_seeds],
+        )?;
+
+        Ok(())
+    }
+
+    /// Process Withdraw instruction
+    pub fn withdraw(program_id: &Pubkey, amount: u64, accounts: &[AccountInfo]) -> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let liquidity_info = next_account_info(account_info_iter)?;
+        let source_info = next_account_info(account_info_iter)?;
+        let destination_info = next_account_info(account_info_iter)?;
+        let token_account_info = next_account_info(account_info_iter)?;
+        let pool_mint_info = next_account_info(account_info_iter)?;
+        let market_info = next_account_info(account_info_iter)?;
+        let market_authority_info = next_account_info(account_info_iter)?;
+        let user_transfer_authority_info = next_account_info(account_info_iter)?;
+        let _token_program_info = next_account_info(account_info_iter)?;
+
+        if market_info.owner != program_id {
+            msg!("Market provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
+        // Get liquidity state
+        let liquidity = Liquidity::unpack(&liquidity_info.data.borrow())?;
+
+        if liquidity.token_account != *token_account_info.key {
+            msg!("Liquidity token account does not match the token account provided");
+            return Err(ProgramError::InvalidArgument.into());
+        }
+
+        if liquidity.pool_mint != *pool_mint_info.key {
+            msg!("Liquidity pool mint does not match the pool mint provided");
+            return Err(ProgramError::InvalidArgument.into());
+        }
+
+        let token_account_amount =
+            Account::unpack_unchecked(&token_account_info.data.borrow())?.amount;
+        let pool_mint_supply = Mint::unpack_unchecked(&pool_mint_info.data.borrow())?.supply;
+        let withdraw_exchange_rate =
+            liquidity.withdraw_exchange_rate(token_account_amount, pool_mint_supply);
+
+        // Burn from soruce provider pool token
+        spl_token_burn(
+            pool_mint_info.clone(),
+            source_info.clone(),
+            user_transfer_authority_info.clone(),
+            amount,
+            &[],
+        )?;
+
+        let (_, bump_seed) = find_program_address(program_id, market_info.key);
+        let signers_seeds = &[&market_info.key.to_bytes()[..32], &[bump_seed]];
+
+        // Transfer liquidity from token account to destination provider
+        spl_token_transfer(
+            token_account_info.clone(),
+            destination_info.clone(),
+            market_authority_info.clone(),
+            amount * withdraw_exchange_rate,
             &[signers_seeds],
         )?;
 
@@ -380,6 +437,11 @@ impl Processor {
             LendingInstruction::Deposit { amount } => {
                 msg!("LendingInstruction: Deposit");
                 Self::deposit(program_id, amount, accounts)
+            }
+
+            LendingInstruction::Withdraw { amount } => {
+                msg!("LendingInstruction: Withdraw");
+                Self::withdraw(program_id, amount, accounts)
             }
         }
     }
@@ -493,6 +555,26 @@ pub fn spl_token_mint_to<'a>(
     )?;
 
     invoke_signed(&ix, &[mint, destination, authority], signers_seeds)
+}
+
+/// SPL burn instruction.
+pub fn spl_token_burn<'a>(
+    mint: AccountInfo<'a>,
+    account: AccountInfo<'a>,
+    authority: AccountInfo<'a>,
+    amount: u64,
+    signers_seeds: &[&[&[u8]]],
+) -> Result<(), ProgramError> {
+    let ix = spl_token::instruction::burn(
+        &spl_token::id(),
+        account.key,
+        mint.key,
+        authority.key,
+        &[],
+        amount,
+    )?;
+
+    invoke_signed(&ix, &[mint, account, authority], signers_seeds)
 }
 
 fn assert_rent_exempt(rent: &Rent, account_info: &AccountInfo) -> ProgramResult {

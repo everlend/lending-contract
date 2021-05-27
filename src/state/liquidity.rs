@@ -1,4 +1,6 @@
 //! Program state definitions
+use std::ops::Div;
+
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use solana_program::{
     msg,
@@ -54,6 +56,24 @@ impl Liquidity {
         self.token_mint = params.token_mint;
         self.token_account = params.token_account;
         self.pool_mint = params.pool_mint;
+    }
+
+    /// Deposit exchange rate
+    pub fn deposit_exchange_rate(&self, token_account_amount: u64, pool_mint_supply: u64) -> u64 {
+        if pool_mint_supply == 0 || token_account_amount == 0 {
+            return 1;
+        }
+
+        pool_mint_supply.div(token_account_amount)
+    }
+
+    /// Withdraw exchange rate
+    pub fn withdraw_exchange_rate(&self, token_account_amount: u64, pool_mint_supply: u64) -> u64 {
+        if pool_mint_supply == 0 || token_account_amount == 0 {
+            return 1;
+        }
+
+        token_account_amount.div(pool_mint_supply)
     }
 }
 

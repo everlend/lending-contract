@@ -83,8 +83,8 @@ pub enum LendingInstruction {
     ///
     /// Accounts:
     /// [R] Liquidity account
-    /// [W] Source provider account
-    /// [W] Destination provider account
+    /// [W] Source provider account (for token mint)
+    /// [W] Destination provider account (for pool mint)
     /// [W] Token account
     /// [W] Pool mint account
     /// [R] Market account
@@ -93,6 +93,23 @@ pub enum LendingInstruction {
     /// [R] Token program id
     Deposit {
         /// Amount of liquidity to deposit
+        amount: u64,
+    },
+
+    /// Withdraw liquidity
+    ///
+    /// Accounts:
+    /// [R] Liquidity account
+    /// [W] Source provider account (for pool mint)
+    /// [W] Destination provider account (for token mint)
+    /// [W] Token account
+    /// [W] Pool mint account
+    /// [R] Market account
+    /// [R] Market authority
+    /// [S] User transfer authority
+    /// [R] Token program id
+    Withdraw {
+        /// Amount of liquidity to withdraw
         amount: u64,
     },
 }
@@ -253,6 +270,41 @@ pub fn deposit(
     user_transfer_authority: &Pubkey,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LendingInstruction::Deposit { amount };
+    let data = init_data.try_to_vec()?;
+    let (market_authority, _) = find_program_address(program_id, market);
+
+    let accounts = vec![
+        AccountMeta::new_readonly(*liquidity, false),
+        AccountMeta::new(*source, false),
+        AccountMeta::new(*destination, false),
+        AccountMeta::new(*token_account, false),
+        AccountMeta::new(*pool_mint, false),
+        AccountMeta::new_readonly(*market, false),
+        AccountMeta::new_readonly(market_authority, false),
+        AccountMeta::new_readonly(*user_transfer_authority, true),
+        AccountMeta::new_readonly(spl_token::id(), false),
+    ];
+
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts,
+        data,
+    })
+}
+
+/// Create `Withdraw` instruction
+pub fn withdraw(
+    program_id: &Pubkey,
+    amount: u64,
+    liquidity: &Pubkey,
+    source: &Pubkey,
+    destination: &Pubkey,
+    token_account: &Pubkey,
+    pool_mint: &Pubkey,
+    market: &Pubkey,
+    user_transfer_authority: &Pubkey,
+) -> Result<Instruction, ProgramError> {
+    let init_data = LendingInstruction::Withdraw { amount };
     let data = init_data.try_to_vec()?;
     let (market_authority, _) = find_program_address(program_id, market);
 
