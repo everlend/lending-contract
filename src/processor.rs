@@ -16,7 +16,8 @@ use solana_program::{
     system_instruction,
     sysvar::Sysvar,
 };
-use spl_token::state::Mint;
+use spl_token::state::{Account, Mint};
+use std::ops::Div;
 
 /// Program state handler.
 pub struct Processor {}
@@ -277,6 +278,11 @@ impl Processor {
         let user_transfer_authority_info = next_account_info(account_info_iter)?;
         let _token_program_info = next_account_info(account_info_iter)?;
 
+        if market_info.owner != program_id {
+            msg!("Market provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
         // Get liquidity state
         let liquidity = Liquidity::unpack(&liquidity_info.data.borrow())?;
 
@@ -290,8 +296,15 @@ impl Processor {
             return Err(ProgramError::InvalidArgument.into());
         }
 
-        let (_, bump_seed) = find_program_address(program_id, market_info.key);
-        let signers_seeds = &[&market_info.key.to_bytes()[..32], &[bump_seed]];
+        // Compute amount to mint before transfers
+        let token_account_amount =
+            Account::unpack_unchecked(&token_account_info.data.borrow())?.amount;
+        let pool_mint_supply = Mint::unpack_unchecked(&pool_mint_info.data.borrow())?.supply;
+        let amount_to_mint = if pool_mint_supply == 0 || token_account_amount == 0 {
+            amount
+        } else {
+            amount * pool_mint_supply.div(token_account_amount)
+        };
 
         // Transfer liquidity from source provider to token account
         spl_token_transfer(
@@ -299,17 +312,19 @@ impl Processor {
             token_account_info.clone(),
             user_transfer_authority_info.clone(),
             amount,
-            signers_seeds,
+            &[],
         )?;
+
+        let (_, bump_seed) = find_program_address(program_id, market_info.key);
+        let signers_seeds = &[&market_info.key.to_bytes()[..32], &[bump_seed]];
 
         // Mint to destination provider pool token
         spl_token_mint_to(
             pool_mint_info.clone(),
             destination_info.clone(),
             market_authority_info.clone(),
-            // TODO: some math for amount of pool mint?
-            amount,
-            signers_seeds,
+            amount_to_mint,
+            &[signers_seeds],
         )?;
 
         Ok(())
@@ -446,7 +461,7 @@ pub fn spl_token_transfer<'a>(
     destination: AccountInfo<'a>,
     authority: AccountInfo<'a>,
     amount: u64,
-    signers_seeds: &[&[u8]],
+    signers_seeds: &[&[&[u8]]],
 ) -> Result<(), ProgramError> {
     let ix = spl_token::instruction::transfer(
         &spl_token::id(),
@@ -457,7 +472,7 @@ pub fn spl_token_transfer<'a>(
         amount,
     )?;
 
-    invoke_signed(&ix, &[source, destination, authority], &[signers_seeds])
+    invoke_signed(&ix, &[source, destination, authority], signers_seeds)
 }
 
 /// SPL mint instruction.
@@ -466,7 +481,7 @@ pub fn spl_token_mint_to<'a>(
     destination: AccountInfo<'a>,
     authority: AccountInfo<'a>,
     amount: u64,
-    signers_seeds: &[&[u8]],
+    signers_seeds: &[&[&[u8]]],
 ) -> Result<(), ProgramError> {
     let ix = spl_token::instruction::mint_to(
         &spl_token::id(),
@@ -477,7 +492,7 @@ pub fn spl_token_mint_to<'a>(
         amount,
     )?;
 
-    invoke_signed(&ix, &[mint, destination, authority], &[signers_seeds])
+    invoke_signed(&ix, &[mint, destination, authority], signers_seeds)
 }
 
 fn assert_rent_exempt(rent: &Rent, account_info: &AccountInfo) -> ProgramResult {

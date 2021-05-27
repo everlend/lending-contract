@@ -68,4 +68,54 @@ async fn success() {
     );
 }
 
+#[tokio::test]
+async fn two_deposits() {
+    let (mut context, market_info, liquidity_info) = setup().await;
+    let provider_info = provider::ProviderInfo::new();
+
+    let (source, destination) = provider_info
+        .create_liquidity_accounts(&mut context, &liquidity_info)
+        .await
+        .unwrap();
+
+    mint_tokens(
+        &mut context,
+        &liquidity_info.token_mint.pubkey(),
+        &source.pubkey(),
+        &market_info.owner,
+        9999999,
+    )
+    .await
+    .unwrap();
+
+    market_info
+        .deposit(
+            &mut context,
+            &liquidity_info,
+            &source.pubkey(),
+            &destination.pubkey(),
+            10000,
+            &provider_info.owner,
+        )
+        .await
+        .unwrap();
+
+    market_info
+        .deposit(
+            &mut context,
+            &liquidity_info,
+            &source.pubkey(),
+            &destination.pubkey(),
+            5000,
+            &provider_info.owner,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        get_token_balance(&mut context, &destination.pubkey()).await,
+        15000
+    );
+}
+
 // TODO: need to add more fail tests
