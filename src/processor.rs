@@ -299,8 +299,6 @@ impl Processor {
         let token_account_amount =
             Account::unpack_unchecked(&token_account_info.data.borrow())?.amount;
         let pool_mint_supply = Mint::unpack_unchecked(&pool_mint_info.data.borrow())?.supply;
-        let deposit_exchange_rate =
-            liquidity.deposit_exchange_rate(token_account_amount, pool_mint_supply);
 
         // Transfer liquidity from source provider to token account
         spl_token_transfer(
@@ -319,7 +317,7 @@ impl Processor {
             pool_mint_info.clone(),
             destination_info.clone(),
             market_authority_info.clone(),
-            amount * deposit_exchange_rate,
+            liquidity.calc_deposit_exchange_amount(amount, token_account_amount, pool_mint_supply),
             &[signers_seeds],
         )?;
 
@@ -360,8 +358,6 @@ impl Processor {
         let token_account_amount =
             Account::unpack_unchecked(&token_account_info.data.borrow())?.amount;
         let pool_mint_supply = Mint::unpack_unchecked(&pool_mint_info.data.borrow())?.supply;
-        let withdraw_exchange_rate =
-            liquidity.withdraw_exchange_rate(token_account_amount, pool_mint_supply);
 
         // Burn from soruce provider pool token
         spl_token_burn(
@@ -380,7 +376,7 @@ impl Processor {
             token_account_info.clone(),
             destination_info.clone(),
             market_authority_info.clone(),
-            amount * withdraw_exchange_rate,
+            liquidity.calc_withdraw_exchange_amount(amount, token_account_amount, pool_mint_supply),
             &[signers_seeds],
         )?;
 
