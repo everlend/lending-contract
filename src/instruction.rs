@@ -89,9 +89,9 @@ pub enum LendingInstruction {
     /// [W] Pool mint account
     /// [R] Market account
     /// [R] Market authority
-    /// [S] User transfer authority
+    /// [RS] User transfer authority
     /// [R] Token program id
-    Deposit {
+    LiquidityDeposit {
         /// Amount of liquidity to deposit
         amount: u64,
     },
@@ -106,9 +106,9 @@ pub enum LendingInstruction {
     /// [W] Pool mint account
     /// [R] Market account
     /// [R] Market authority
-    /// [S] User transfer authority
+    /// [RS] User transfer authority
     /// [R] Token program id
-    Withdraw {
+    LiquidityWithdraw {
         /// Amount of liquidity to withdraw
         amount: u64,
     },
@@ -124,6 +124,21 @@ pub enum LendingInstruction {
     /// [R] Rent sysvar
     /// [R] Token program id
     CreateObligation,
+
+    /// Deposit collateral token to obligation
+    ///
+    /// Accounts:
+    /// [W] Obligation account
+    /// [R] Collateral account
+    /// [W] Source account (for collateral token mint)
+    /// [W] Collateral token account
+    /// [R] Market account
+    /// [RS] User transfer authority
+    /// [R] Token program id
+    ObligationCollateralDeposit {
+        /// Amount of collateral to deposit
+        amount: u64,
+    },
 }
 
 /// Create `InitMarket` instruction
@@ -269,8 +284,8 @@ pub fn update_collateral_token(
     })
 }
 
-/// Create `Deposit` instruction
-pub fn deposit(
+/// Create `LiquidityDeposit` instruction
+pub fn liquidity_deposit(
     program_id: &Pubkey,
     amount: u64,
     liquidity: &Pubkey,
@@ -281,7 +296,7 @@ pub fn deposit(
     market: &Pubkey,
     user_transfer_authority: &Pubkey,
 ) -> Result<Instruction, ProgramError> {
-    let init_data = LendingInstruction::Deposit { amount };
+    let init_data = LendingInstruction::LiquidityDeposit { amount };
     let data = init_data.try_to_vec()?;
     let (market_authority, _) = find_program_address(program_id, market);
 
@@ -304,8 +319,8 @@ pub fn deposit(
     })
 }
 
-/// Create `Withdraw` instruction
-pub fn withdraw(
+/// Create `LiquidityWithdraw` instruction
+pub fn liquidity_withdraw(
     program_id: &Pubkey,
     amount: u64,
     liquidity: &Pubkey,
@@ -316,7 +331,7 @@ pub fn withdraw(
     market: &Pubkey,
     user_transfer_authority: &Pubkey,
 ) -> Result<Instruction, ProgramError> {
-    let init_data = LendingInstruction::Withdraw { amount };
+    let init_data = LendingInstruction::LiquidityWithdraw { amount };
     let data = init_data.try_to_vec()?;
     let (market_authority, _) = find_program_address(program_id, market);
 
@@ -358,6 +373,37 @@ pub fn create_obligation(
         AccountMeta::new_readonly(*market, false),
         AccountMeta::new_readonly(*owner, true),
         AccountMeta::new_readonly(sysvar::rent::id(), false),
+    ];
+
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts,
+        data,
+    })
+}
+
+/// Create `ObligationCollateralDeposit` instruction
+pub fn obligation_collateral_deposit(
+    program_id: &Pubkey,
+    amount: u64,
+    obligation: &Pubkey,
+    collateral: &Pubkey,
+    source: &Pubkey,
+    token_account: &Pubkey,
+    market: &Pubkey,
+    user_transfer_authority: &Pubkey,
+) -> Result<Instruction, ProgramError> {
+    let init_data = LendingInstruction::ObligationCollateralDeposit { amount };
+    let data = init_data.try_to_vec()?;
+
+    let accounts = vec![
+        AccountMeta::new(*obligation, false),
+        AccountMeta::new_readonly(*collateral, false),
+        AccountMeta::new(*source, false),
+        AccountMeta::new(*token_account, false),
+        AccountMeta::new_readonly(*market, false),
+        AccountMeta::new_readonly(*user_transfer_authority, true),
+        AccountMeta::new_readonly(spl_token::id(), false),
     ];
 
     Ok(Instruction {

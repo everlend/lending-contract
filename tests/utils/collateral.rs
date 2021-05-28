@@ -1,6 +1,6 @@
-use super::get_account;
+use super::{get_account, market::MarketInfo};
 use everlend_lending::{
-    id, instruction,
+    find_program_address, id, instruction,
     state::{Collateral, CollateralStatus},
 };
 use solana_program::{program_pack::Pack, pubkey::Pubkey, system_instruction};
@@ -22,9 +22,12 @@ pub struct CollateralInfo {
 }
 
 impl CollateralInfo {
-    pub fn new(base: &Pubkey, seed: &str) -> Self {
+    pub fn new(seed: &str, market_info: &MarketInfo) -> Self {
+        let (market_authority, _) =
+            find_program_address(&everlend_lending::id(), &market_info.market.pubkey());
+
         Self {
-            collateral_pubkey: Pubkey::create_with_seed(base, seed, &id()).unwrap(),
+            collateral_pubkey: Pubkey::create_with_seed(&market_authority, seed, &id()).unwrap(),
             token_mint: Keypair::new(),
             token_account: Keypair::new(),
         }

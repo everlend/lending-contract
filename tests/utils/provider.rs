@@ -1,4 +1,4 @@
-use super::{create_token_account, liquidity};
+use super::{create_token_account, liquidity::LiquidityInfo};
 use solana_program_test::ProgramTestContext;
 use solana_sdk::{
     signature::{Keypair, Signer},
@@ -20,7 +20,7 @@ impl ProviderActor {
     pub async fn create_liquidity_accounts(
         &self,
         context: &mut ProgramTestContext,
-        liquidity_info: &liquidity::LiquidityInfo,
+        liquidity_info: &LiquidityInfo,
     ) -> transport::Result<(Keypair, Keypair)> {
         let source = Keypair::new();
         let destination = Keypair::new();

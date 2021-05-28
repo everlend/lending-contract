@@ -119,14 +119,14 @@ impl Processor {
             token_mint.decimals,
         )?;
 
-        // Update liquidity state & increment liquidity tokens counter
+        // Update liquidity state & increase liquidity tokens counter
         liquidity.init(InitLiquidityParams {
             market: *market_info.key,
             token_mint: *token_mint_info.key,
             token_account: *token_account_info.key,
             pool_mint: *pool_mint_info.key,
         });
-        market.increment_liquidity_tokens();
+        market.increase_liquidity_tokens();
 
         Liquidity::pack(liquidity, *liquidity_info.data.borrow_mut())?;
         Market::pack(market, *market_info.data.borrow_mut())?;
@@ -219,7 +219,7 @@ impl Processor {
             rent_info.clone(),
         )?;
 
-        // Update collateral state & increment collateral tokens counter
+        // Update collateral state & increase collateral tokens counter
         collateral.init(InitCollateralParams {
             market: *market_info.key,
             token_mint: *token_mint_info.key,
@@ -227,7 +227,7 @@ impl Processor {
             ratio_initial,
             ratio_healthy,
         });
-        market.increment_collateral_tokens();
+        market.increase_collateral_tokens();
 
         Collateral::pack(collateral, *collateral_info.data.borrow_mut())?;
         Market::pack(market, *market_info.data.borrow_mut())?;
@@ -264,8 +264,12 @@ impl Processor {
         Ok(())
     }
 
-    /// Process Deposit instruction
-    pub fn deposit(program_id: &Pubkey, amount: u64, accounts: &[AccountInfo]) -> ProgramResult {
+    /// Process LiquidityDeposit instruction
+    pub fn liquidity_deposit(
+        program_id: &Pubkey,
+        amount: u64,
+        accounts: &[AccountInfo],
+    ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let liquidity_info = next_account_info(account_info_iter)?;
         let source_info = next_account_info(account_info_iter)?;
@@ -324,8 +328,12 @@ impl Processor {
         Ok(())
     }
 
-    /// Process Withdraw instruction
-    pub fn withdraw(program_id: &Pubkey, amount: u64, accounts: &[AccountInfo]) -> ProgramResult {
+    /// Process LiquidityWithdraw instruction
+    pub fn liquidity_withdraw(
+        program_id: &Pubkey,
+        amount: u64,
+        accounts: &[AccountInfo],
+    ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let liquidity_info = next_account_info(account_info_iter)?;
         let source_info = next_account_info(account_info_iter)?;
@@ -403,6 +411,16 @@ impl Processor {
             return Err(LendingError::InvalidAccountOwner.into());
         }
 
+        if collateral_info.owner != program_id {
+            msg!("Collateral provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
+        if obligation_info.owner != program_id {
+            msg!("Obligation provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
         assert_rent_exempt(rent, obligation_info)?;
 
         if obligation_info.owner != program_id {
@@ -423,6 +441,72 @@ impl Processor {
         });
 
         Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
+
+        Ok(())
+    }
+
+    /// Process ObligationCollateralDeposit instruction
+    pub fn obligation_collateral_deposit(
+        program_id: &Pubkey,
+        amount: u64,
+        accounts: &[AccountInfo],
+    ) -> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let obligation_info = next_account_info(account_info_iter)?;
+        let collateral_info = next_account_info(account_info_iter)?;
+        let source_info = next_account_info(account_info_iter)?;
+        let token_account_info = next_account_info(account_info_iter)?;
+        let market_info = next_account_info(account_info_iter)?;
+        let user_transfer_authority_info = next_account_info(account_info_iter)?;
+        let _token_program_info = next_account_info(account_info_iter)?;
+
+        if market_info.owner != program_id {
+            msg!("Market provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
+        if collateral_info.owner != program_id {
+            msg!("Collateral provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
+        if obligation_info.owner != program_id {
+            msg!("Obligation provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
+        // Get obligation state
+        let mut obligation = Obligation::unpack(&obligation_info.data.borrow())?;
+
+        if obligation.collateral != *collateral_info.key {
+            msg!("Obligation collateral does not match the collateral provided");
+            return Err(ProgramError::InvalidArgument.into());
+        }
+
+        if obligation.market != *market_info.key {
+            msg!("Obligation market does not match the market provided");
+            return Err(ProgramError::InvalidArgument.into());
+        }
+
+        // Get collateral state
+        let collateral = Collateral::unpack(&collateral_info.data.borrow())?;
+
+        if collateral.token_account != *token_account_info.key {
+            msg!("Collateral token account does not match the token account provided");
+            return Err(ProgramError::InvalidArgument.into());
+        }
+
+        obligation.collateral_deposit(amount);
+        Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
+
+        // Transfer liquidity from source borrower to token account
+        spl_token_transfer(
+            source_info.clone(),
+            token_account_info.clone(),
+            user_transfer_authority_info.clone(),
+            amount,
+            &[],
+        )?;
 
         Ok(())
     }
@@ -474,19 +558,24 @@ impl Processor {
                 )
             }
 
-            LendingInstruction::Deposit { amount } => {
-                msg!("LendingInstruction: Deposit");
-                Self::deposit(program_id, amount, accounts)
+            LendingInstruction::LiquidityDeposit { amount } => {
+                msg!("LendingInstruction: LiquidityDeposit");
+                Self::liquidity_deposit(program_id, amount, accounts)
             }
 
-            LendingInstruction::Withdraw { amount } => {
-                msg!("LendingInstruction: Withdraw");
-                Self::withdraw(program_id, amount, accounts)
+            LendingInstruction::LiquidityWithdraw { amount } => {
+                msg!("LendingInstruction: LiquidityWithdraw");
+                Self::liquidity_withdraw(program_id, amount, accounts)
             }
 
             LendingInstruction::CreateObligation => {
                 msg!("LendingInstruction: CreateObligation");
                 Self::create_obligation(program_id, accounts)
+            }
+
+            LendingInstruction::ObligationCollateralDeposit { amount } => {
+                msg!("LendingInstruction: ObligationCollateralDeposit");
+                Self::obligation_collateral_deposit(program_id, amount, accounts)
             }
         }
     }

@@ -3,8 +3,10 @@
 mod utils;
 
 use everlend_lending::state::LiquidityStatus;
+use solana_program::instruction::InstructionError;
 use solana_program_test::*;
-use solana_sdk::signer::Signer;
+use solana_sdk::{signer::Signer, transaction::TransactionError};
+use spl_token::error::TokenError;
 use utils::*;
 
 async fn setup() -> (ProgramTestContext, MarketInfo, LiquidityInfo) {
@@ -29,7 +31,7 @@ async fn setup() -> (ProgramTestContext, MarketInfo, LiquidityInfo) {
 #[tokio::test]
 async fn success() {
     let (mut context, market_info, liquidity_info) = setup().await;
-    let provider_actor = provider::ProviderActor::new();
+    let provider_actor = ProviderActor::new();
 
     let (source, destination) = provider_actor
         .create_liquidity_accounts(&mut context, &liquidity_info)
@@ -41,15 +43,15 @@ async fn success() {
         &liquidity_info.token_mint.pubkey(),
         &source.pubkey(),
         &market_info.owner,
-        9999999,
+        10000,
     )
     .await
     .unwrap();
 
-    market_info
+    liquidity_info
         .deposit(
             &mut context,
-            &liquidity_info,
+            &market_info,
             &source.pubkey(),
             &destination.pubkey(),
             10000,
@@ -58,16 +60,32 @@ async fn success() {
         .await
         .unwrap();
 
+    liquidity_info
+        .withdraw(
+            &mut context,
+            &market_info,
+            &destination.pubkey(),
+            &source.pubkey(),
+            7000,
+            &provider_actor.owner,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        get_token_balance(&mut context, &source.pubkey()).await,
+        7000
+    );
     assert_eq!(
         get_token_balance(&mut context, &destination.pubkey()).await,
-        10000
+        3000
     );
 }
 
 #[tokio::test]
-async fn two_deposits() {
+async fn fail_more_than_possible() {
     let (mut context, market_info, liquidity_info) = setup().await;
-    let provider_actor = provider::ProviderActor::new();
+    let provider_actor = ProviderActor::new();
 
     let (source, destination) = provider_actor
         .create_liquidity_accounts(&mut context, &liquidity_info)
@@ -79,38 +97,40 @@ async fn two_deposits() {
         &liquidity_info.token_mint.pubkey(),
         &source.pubkey(),
         &market_info.owner,
-        9999999,
+        500,
     )
     .await
     .unwrap();
 
-    market_info
+    liquidity_info
         .deposit(
             &mut context,
-            &liquidity_info,
+            &market_info,
             &source.pubkey(),
             &destination.pubkey(),
-            10000,
-            &provider_actor.owner,
-        )
-        .await
-        .unwrap();
-
-    market_info
-        .deposit(
-            &mut context,
-            &liquidity_info,
-            &source.pubkey(),
-            &destination.pubkey(),
-            5000,
+            500,
             &provider_actor.owner,
         )
         .await
         .unwrap();
 
     assert_eq!(
-        get_token_balance(&mut context, &destination.pubkey()).await,
-        15000
+        liquidity_info
+            .withdraw(
+                &mut context,
+                &market_info,
+                &destination.pubkey(),
+                &source.pubkey(),
+                1000,
+                &provider_actor.owner,
+            )
+            .await
+            .unwrap_err()
+            .unwrap(),
+        TransactionError::InstructionError(
+            0,
+            InstructionError::Custom(TokenError::InsufficientFunds as u32)
+        )
     );
 }
 

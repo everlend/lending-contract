@@ -22,10 +22,10 @@ pub struct Obligation {
     pub liquidity: Pubkey,
     /// Collateral
     pub collateral: Pubkey,
-    /// Amount of liquidity
-    pub amount_liquidity: u64,
-    /// Amount of collateral
-    pub amount_collateral: u64,
+    /// Amount of borrowed liquidity
+    pub amount_liquidity_borrowed: u64,
+    /// Amount of deposited collateral
+    pub amount_collateral_deposited: u64,
 }
 
 impl Obligation {
@@ -36,8 +36,18 @@ impl Obligation {
         self.owner = params.owner;
         self.liquidity = params.liquidity;
         self.collateral = params.collateral;
-        self.amount_liquidity = 0;
-        self.amount_collateral = 0;
+        self.amount_liquidity_borrowed = 0;
+        self.amount_collateral_deposited = 0;
+    }
+
+    /// Increase amount of deposited collateral
+    pub fn collateral_deposit(&mut self, amount: u64) {
+        self.amount_collateral_deposited += amount;
+    }
+
+    /// Decrease amount of deposited collateral
+    pub fn collateral_withdraw(&mut self, amount: u64) {
+        self.amount_collateral_deposited -= amount;
     }
 }
 

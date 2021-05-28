@@ -1,9 +1,7 @@
 use super::{collateral::CollateralInfo, get_account, liquidity::LiquidityInfo};
 use crate::utils::create_mint;
-use everlend_lending::{find_program_address, id, instruction, state::Market};
-use solana_program::{
-    borsh::get_packed_len, program_pack::Pack, pubkey::Pubkey, system_instruction,
-};
+use everlend_lending::{id, instruction, state::Market};
+use solana_program::{borsh::get_packed_len, program_pack::Pack, system_instruction};
 use solana_program_test::ProgramTestContext;
 use solana_sdk::{
     signature::{Keypair, Signer},
@@ -57,12 +55,8 @@ impl MarketInfo {
         context: &mut ProgramTestContext,
     ) -> transport::Result<LiquidityInfo> {
         let liquidity_tokens = self.get_data(context).await.liquidity_tokens;
-
-        let (market_authority, _) =
-            find_program_address(&everlend_lending::id(), &self.market.pubkey());
-
         let seed = format!("liquidity{:?}", liquidity_tokens);
-        let liquidity_info = LiquidityInfo::new(&market_authority, &seed);
+        let liquidity_info = LiquidityInfo::new(&seed, &self);
 
         create_mint(context, &liquidity_info.token_mint, &self.owner.pubkey())
             .await
@@ -81,12 +75,8 @@ impl MarketInfo {
         context: &mut ProgramTestContext,
     ) -> transport::Result<CollateralInfo> {
         let collateral_tokens = self.get_data(context).await.collateral_tokens;
-
-        let (market_authority, _) =
-            find_program_address(&everlend_lending::id(), &self.market.pubkey());
-
         let seed = format!("collateral{:?}", collateral_tokens);
-        let collateral_info = CollateralInfo::new(&market_authority, &seed);
+        let collateral_info = CollateralInfo::new(&seed, self);
 
         create_mint(context, &collateral_info.token_mint, &self.owner.pubkey())
             .await
@@ -98,65 +88,5 @@ impl MarketInfo {
             .unwrap();
 
         Ok(collateral_info)
-    }
-
-    pub async fn deposit(
-        &self,
-        context: &mut ProgramTestContext,
-        liquidity_info: &LiquidityInfo,
-        source: &Pubkey,
-        destination: &Pubkey,
-        amount: u64,
-        provider: &Keypair,
-    ) -> transport::Result<()> {
-        let tx = Transaction::new_signed_with_payer(
-            &[instruction::deposit(
-                &id(),
-                amount,
-                &liquidity_info.liquidity_pubkey,
-                source,
-                destination,
-                &liquidity_info.token_account.pubkey(),
-                &liquidity_info.pool_mint.pubkey(),
-                &self.market.pubkey(),
-                &provider.pubkey(),
-            )
-            .unwrap()],
-            Some(&context.payer.pubkey()),
-            &[&context.payer, &provider],
-            context.last_blockhash,
-        );
-
-        context.banks_client.process_transaction(tx).await
-    }
-
-    pub async fn withdraw(
-        &self,
-        context: &mut ProgramTestContext,
-        liquidity_info: &LiquidityInfo,
-        source: &Pubkey,
-        destination: &Pubkey,
-        amount: u64,
-        provider: &Keypair,
-    ) -> transport::Result<()> {
-        let tx = Transaction::new_signed_with_payer(
-            &[instruction::withdraw(
-                &id(),
-                amount,
-                &liquidity_info.liquidity_pubkey,
-                source,
-                destination,
-                &liquidity_info.token_account.pubkey(),
-                &liquidity_info.pool_mint.pubkey(),
-                &self.market.pubkey(),
-                &provider.pubkey(),
-            )
-            .unwrap()],
-            Some(&context.payer.pubkey()),
-            &[&context.payer, &provider],
-            context.last_blockhash,
-        );
-
-        context.banks_client.process_transaction(tx).await
     }
 }

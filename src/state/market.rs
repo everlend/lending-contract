@@ -31,13 +31,13 @@ impl Market {
         self.owner = params.owner;
     }
 
-    /// Increment liquidity tokens
-    pub fn increment_liquidity_tokens(&mut self) {
+    /// Increase liquidity tokens
+    pub fn increase_liquidity_tokens(&mut self) {
         self.liquidity_tokens += 1;
     }
 
-    /// Increment collateral tokens
-    pub fn increment_collateral_tokens(&mut self) {
+    /// Increase collateral tokens
+    pub fn increase_collateral_tokens(&mut self) {
         self.collateral_tokens += 1;
     }
 }
