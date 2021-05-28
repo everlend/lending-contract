@@ -2,11 +2,14 @@
 use super::*;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use solana_program::{
+    entrypoint::ProgramResult,
     msg,
     program_error::ProgramError,
     program_pack::{IsInitialized, Pack, Sealed},
     pubkey::Pubkey,
 };
+
+const RATIO_POWER: u64 = u64::pow(10, 9);
 
 /// Obligation
 #[repr(C)]
@@ -46,8 +49,18 @@ impl Obligation {
     }
 
     /// Decrease amount of deposited collateral
-    pub fn collateral_withdraw(&mut self, amount: u64) {
-        self.amount_collateral_deposited -= amount;
+    pub fn collateral_withdraw(&mut self, amount: u64, ratio_initial: u64) -> ProgramResult {
+        // deposited - borrowed / ratio_initial
+        let withdrawal_limit = self.amount_collateral_deposited
+            - self.amount_liquidity_borrowed * RATIO_POWER / ratio_initial;
+
+        if amount > withdrawal_limit {
+            msg!("Withdrawal limit exceeded");
+            Err(ProgramError::InvalidArgument.into())
+        } else {
+            self.amount_collateral_deposited -= amount;
+            Ok(())
+        }
     }
 }
 

@@ -94,4 +94,32 @@ impl ObligationInfo {
 
         context.banks_client.process_transaction(tx).await
     }
+
+    pub async fn collateral_withdraw(
+        &self,
+        context: &mut ProgramTestContext,
+        market_info: &MarketInfo,
+        collateral_info: &CollateralInfo,
+        amount: u64,
+        destination: &Pubkey,
+    ) -> transport::Result<()> {
+        let tx = Transaction::new_signed_with_payer(
+            &[instruction::obligation_collateral_withdraw(
+                &id(),
+                amount,
+                &self.obligation.pubkey(),
+                &collateral_info.collateral_pubkey,
+                destination,
+                &collateral_info.token_account.pubkey(),
+                &market_info.market.pubkey(),
+                &self.owner.pubkey(),
+            )
+            .unwrap()],
+            Some(&context.payer.pubkey()),
+            &[&context.payer, &self.owner],
+            context.last_blockhash,
+        );
+
+        context.banks_client.process_transaction(tx).await
+    }
 }

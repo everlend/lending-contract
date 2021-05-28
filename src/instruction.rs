@@ -139,6 +139,22 @@ pub enum LendingInstruction {
         /// Amount of collateral to deposit
         amount: u64,
     },
+
+    /// Withdraw collateral token from obligation
+    ///
+    /// Accounts:
+    /// [W] Obligation account
+    /// [R] Collateral account
+    /// [W] Destination account (for collateral token mint)
+    /// [W] Collateral token account
+    /// [R] Market account
+    /// [RS] Obligation owner
+    /// [R] Market authority
+    /// [R] Token program id
+    ObligationCollateralWithdraw {
+        /// Amount of collateral to withdraw
+        amount: u64,
+    },
 }
 
 /// Create `InitMarket` instruction
@@ -403,6 +419,39 @@ pub fn obligation_collateral_deposit(
         AccountMeta::new(*token_account, false),
         AccountMeta::new_readonly(*market, false),
         AccountMeta::new_readonly(*user_transfer_authority, true),
+        AccountMeta::new_readonly(spl_token::id(), false),
+    ];
+
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts,
+        data,
+    })
+}
+
+/// Create `ObligationCollateralWithdraw` instruction
+pub fn obligation_collateral_withdraw(
+    program_id: &Pubkey,
+    amount: u64,
+    obligation: &Pubkey,
+    collateral: &Pubkey,
+    destination: &Pubkey,
+    token_account: &Pubkey,
+    market: &Pubkey,
+    obligation_owner: &Pubkey,
+) -> Result<Instruction, ProgramError> {
+    let init_data = LendingInstruction::ObligationCollateralWithdraw { amount };
+    let data = init_data.try_to_vec()?;
+    let (market_authority, _) = find_program_address(program_id, market);
+
+    let accounts = vec![
+        AccountMeta::new(*obligation, false),
+        AccountMeta::new_readonly(*collateral, false),
+        AccountMeta::new(*destination, false),
+        AccountMeta::new(*token_account, false),
+        AccountMeta::new_readonly(*market, false),
+        AccountMeta::new_readonly(*obligation_owner, true),
+        AccountMeta::new_readonly(market_authority, false),
         AccountMeta::new_readonly(spl_token::id(), false),
     ];
 

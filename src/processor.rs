@@ -30,7 +30,7 @@ impl Processor {
         let rent = &Rent::from_account_info(rent_info)?;
 
         if !owner_info.is_signer {
-            return Err(ProgramError::MissingRequiredSignature);
+            return Err(ProgramError::MissingRequiredSignature.into());
         }
 
         assert_rent_exempt(rent, market_info)?;
@@ -69,7 +69,7 @@ impl Processor {
         let rent = &Rent::from_account_info(rent_info)?;
 
         if !market_owner_info.is_signer {
-            return Err(ProgramError::MissingRequiredSignature);
+            return Err(ProgramError::MissingRequiredSignature.into());
         }
 
         if market_info.owner != program_id {
@@ -179,7 +179,7 @@ impl Processor {
         let rent = &Rent::from_account_info(rent_info)?;
 
         if !market_owner_info.is_signer {
-            return Err(ProgramError::MissingRequiredSignature);
+            return Err(ProgramError::MissingRequiredSignature.into());
         }
 
         if market_info.owner != program_id {
@@ -403,7 +403,7 @@ impl Processor {
         let rent = &Rent::from_account_info(rent_info)?;
 
         if !obligation_owner_info.is_signer {
-            return Err(ProgramError::MissingRequiredSignature);
+            return Err(ProgramError::MissingRequiredSignature.into());
         }
 
         if market_info.owner != program_id {
@@ -511,6 +511,87 @@ impl Processor {
         Ok(())
     }
 
+    /// Process ObligationCollateralWithdraw instruction
+    pub fn obligation_collateral_withdraw(
+        program_id: &Pubkey,
+        amount: u64,
+        accounts: &[AccountInfo],
+    ) -> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let obligation_info = next_account_info(account_info_iter)?;
+        let collateral_info = next_account_info(account_info_iter)?;
+        let destination_info = next_account_info(account_info_iter)?;
+        let token_account_info = next_account_info(account_info_iter)?;
+        let market_info = next_account_info(account_info_iter)?;
+        let obligation_owner_info = next_account_info(account_info_iter)?;
+        let market_authority_info = next_account_info(account_info_iter)?;
+        let _token_program_info = next_account_info(account_info_iter)?;
+
+        if !obligation_owner_info.is_signer {
+            return Err(ProgramError::MissingRequiredSignature.into());
+        }
+
+        if market_info.owner != program_id {
+            msg!("Market provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
+        if collateral_info.owner != program_id {
+            msg!("Collateral provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
+        if obligation_info.owner != program_id {
+            msg!("Obligation provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
+        // Get obligation state
+        let mut obligation = Obligation::unpack(&obligation_info.data.borrow())?;
+
+        if obligation.owner != *obligation_owner_info.key {
+            msg!("Obligation owner does not match the owner provided");
+            return Err(ProgramError::InvalidArgument.into());
+        }
+
+        if obligation.collateral != *collateral_info.key {
+            msg!("Obligation collateral does not match the collateral provided");
+            return Err(ProgramError::InvalidArgument.into());
+        }
+
+        if obligation.market != *market_info.key {
+            msg!("Obligation market does not match the market provided");
+            return Err(ProgramError::InvalidArgument.into());
+        }
+
+        // Get collateral state
+        let collateral = Collateral::unpack(&collateral_info.data.borrow())?;
+
+        if collateral.token_account != *token_account_info.key {
+            msg!("Collateral token account does not match the token account provided");
+            return Err(ProgramError::InvalidArgument.into());
+        }
+
+        // Calculation of available funds for withdrawal
+
+        obligation.collateral_withdraw(amount, collateral.ratio_initial)?;
+        Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
+
+        let (_, bump_seed) = find_program_address(program_id, market_info.key);
+        let signers_seeds = &[&market_info.key.to_bytes()[..32], &[bump_seed]];
+
+        // Transfer liquidity from source borrower to token account
+        spl_token_transfer(
+            token_account_info.clone(),
+            destination_info.clone(),
+            market_authority_info.clone(),
+            amount,
+            &[signers_seeds],
+        )?;
+
+        Ok(())
+    }
+
     /// Instruction processing router
     pub fn process_instruction(
         program_id: &Pubkey,
@@ -576,6 +657,11 @@ impl Processor {
             LendingInstruction::ObligationCollateralDeposit { amount } => {
                 msg!("LendingInstruction: ObligationCollateralDeposit");
                 Self::obligation_collateral_deposit(program_id, amount, accounts)
+            }
+
+            LendingInstruction::ObligationCollateralWithdraw { amount } => {
+                msg!("LendingInstruction: ObligationCollateralWithdraw");
+                Self::obligation_collateral_withdraw(program_id, amount, accounts)
             }
         }
     }

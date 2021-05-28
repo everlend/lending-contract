@@ -31,6 +31,43 @@ async fn setup() -> (
     (context, market_info, liquidity_info, collateral_info)
 }
 
+async fn prepare_borrower(
+    context: &mut ProgramTestContext,
+    market_info: &MarketInfo,
+    liquidity_info: &LiquidityInfo,
+    collateral_info: &CollateralInfo,
+    mint_amount: u64,
+) -> (ObligationInfo, Keypair) {
+    let obligation_info = ObligationInfo::new();
+    obligation_info
+        .create(context, &market_info, &liquidity_info, &collateral_info)
+        .await
+        .unwrap();
+
+    // Create source borrower
+    let source = Keypair::new();
+    create_token_account(
+        context,
+        &source,
+        &collateral_info.token_mint.pubkey(),
+        &obligation_info.owner.pubkey(),
+    )
+    .await
+    .unwrap();
+
+    mint_tokens(
+        context,
+        &collateral_info.token_mint.pubkey(),
+        &source.pubkey(),
+        &market_info.owner,
+        mint_amount,
+    )
+    .await
+    .unwrap();
+
+    (obligation_info, source)
+}
+
 #[tokio::test]
 async fn success() {
     let (mut context, market_info, liquidity_info, collateral_info) = setup().await;
@@ -55,38 +92,14 @@ async fn success() {
 #[tokio::test]
 async fn collateral_deposit() {
     let (mut context, market_info, liquidity_info, collateral_info) = setup().await;
-
-    let obligation_info = ObligationInfo::new();
-    obligation_info
-        .create(
-            &mut context,
-            &market_info,
-            &liquidity_info,
-            &collateral_info,
-        )
-        .await
-        .unwrap();
-
-    // Create source borrower
-    let source = Keypair::new();
-    create_token_account(
+    let (obligation_info, source) = prepare_borrower(
         &mut context,
-        &source,
-        &collateral_info.token_mint.pubkey(),
-        &obligation_info.owner.pubkey(),
-    )
-    .await
-    .unwrap();
-
-    mint_tokens(
-        &mut context,
-        &collateral_info.token_mint.pubkey(),
-        &source.pubkey(),
-        &market_info.owner,
+        &market_info,
+        &liquidity_info,
+        &collateral_info,
         99999,
     )
-    .await
-    .unwrap();
+    .await;
 
     const DEPOSIT_AMOUNT: u64 = 10000;
     obligation_info
@@ -106,6 +119,47 @@ async fn collateral_deposit() {
             .await
             .amount_collateral_deposited,
         DEPOSIT_AMOUNT
+    );
+}
+
+#[tokio::test]
+async fn collateral_withdraw() {
+    let (mut context, market_info, liquidity_info, collateral_info) = setup().await;
+    let (obligation_info, source) = prepare_borrower(
+        &mut context,
+        &market_info,
+        &liquidity_info,
+        &collateral_info,
+        10000,
+    )
+    .await;
+
+    obligation_info
+        .collateral_deposit(
+            &mut context,
+            &market_info,
+            &collateral_info,
+            10000,
+            &source.pubkey(),
+        )
+        .await
+        .unwrap();
+
+    const WITHDRAW_AMOUNT: u64 = 10000;
+    obligation_info
+        .collateral_withdraw(
+            &mut context,
+            &market_info,
+            &collateral_info,
+            WITHDRAW_AMOUNT,
+            &source.pubkey(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        get_token_balance(&mut context, &source.pubkey()).await,
+        WITHDRAW_AMOUNT
     );
 }
 
