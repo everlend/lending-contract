@@ -6,11 +6,11 @@ use solana_sdk::{
 };
 
 #[derive(Debug)]
-pub struct ProviderInfo {
+pub struct ProviderActor {
     pub owner: Keypair,
 }
 
-impl ProviderInfo {
+impl ProviderActor {
     pub fn new() -> Self {
         Self {
             owner: Keypair::new(),

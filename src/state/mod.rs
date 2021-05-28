@@ -3,10 +3,12 @@
 mod collateral;
 mod liquidity;
 mod market;
+mod obligation;
 
 pub use collateral::*;
 pub use liquidity::*;
 pub use market::*;
+pub use obligation::*;
 
 /// Accounts are created with data zeroed out, so uninitialized state instances
 /// will have the version set to 0.

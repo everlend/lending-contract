@@ -383,6 +383,50 @@ impl Processor {
         Ok(())
     }
 
+    /// Process CreateObligation instruction
+    pub fn create_obligation(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let obligation_info = next_account_info(account_info_iter)?;
+        let liquidity_info = next_account_info(account_info_iter)?;
+        let collateral_info = next_account_info(account_info_iter)?;
+        let market_info = next_account_info(account_info_iter)?;
+        let obligation_owner_info = next_account_info(account_info_iter)?;
+        let rent_info = next_account_info(account_info_iter)?;
+        let rent = &Rent::from_account_info(rent_info)?;
+
+        if !obligation_owner_info.is_signer {
+            return Err(ProgramError::MissingRequiredSignature);
+        }
+
+        if market_info.owner != program_id {
+            msg!("Market provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
+        assert_rent_exempt(rent, obligation_info)?;
+
+        if obligation_info.owner != program_id {
+            msg!("Obligation provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
+        // Get obligation state
+        let mut obligation = Obligation::unpack_unchecked(&obligation_info.data.borrow())?;
+        assert_uninitialized(&obligation)?;
+
+        // Init obligation state
+        obligation.init(InitObligationParams {
+            market: *market_info.key,
+            owner: *obligation_owner_info.key,
+            liquidity: *liquidity_info.key,
+            collateral: *collateral_info.key,
+        });
+
+        Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
+
+        Ok(())
+    }
+
     /// Instruction processing router
     pub fn process_instruction(
         program_id: &Pubkey,
@@ -438,6 +482,11 @@ impl Processor {
             LendingInstruction::Withdraw { amount } => {
                 msg!("LendingInstruction: Withdraw");
                 Self::withdraw(program_id, amount, accounts)
+            }
+
+            LendingInstruction::CreateObligation => {
+                msg!("LendingInstruction: CreateObligation");
+                Self::create_obligation(program_id, accounts)
             }
         }
     }

@@ -112,6 +112,18 @@ pub enum LendingInstruction {
         /// Amount of liquidity to withdraw
         amount: u64,
     },
+
+    /// Create obligation token
+    ///
+    /// Accounts:
+    /// [W] Obligation account to create - uninitialized
+    /// [R] Liquidity account
+    /// [R] Collateral account
+    /// [R] Market account
+    /// [RS] Obligation owner
+    /// [R] Rent sysvar
+    /// [R] Token program id
+    CreateObligation,
 }
 
 /// Create `InitMarket` instruction
@@ -318,6 +330,34 @@ pub fn withdraw(
         AccountMeta::new_readonly(market_authority, false),
         AccountMeta::new_readonly(*user_transfer_authority, true),
         AccountMeta::new_readonly(spl_token::id(), false),
+    ];
+
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts,
+        data,
+    })
+}
+
+/// Create `CreateObligation` instruction
+pub fn create_obligation(
+    program_id: &Pubkey,
+    obligation: &Pubkey,
+    liquidity: &Pubkey,
+    collateral: &Pubkey,
+    market: &Pubkey,
+    owner: &Pubkey,
+) -> Result<Instruction, ProgramError> {
+    let init_data = LendingInstruction::CreateObligation;
+    let data = init_data.try_to_vec()?;
+
+    let accounts = vec![
+        AccountMeta::new(*obligation, false),
+        AccountMeta::new_readonly(*liquidity, false),
+        AccountMeta::new_readonly(*collateral, false),
+        AccountMeta::new_readonly(*market, false),
+        AccountMeta::new_readonly(*owner, true),
+        AccountMeta::new_readonly(sysvar::rent::id(), false),
     ];
 
     Ok(Instruction {

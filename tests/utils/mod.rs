@@ -4,13 +4,22 @@ use everlend_lending::{id, processor};
 use solana_program::{program_pack::Pack, system_instruction};
 use solana_program_test::ProgramTestContext;
 use solana_program_test::*;
-use solana_sdk::{account::Account, signature::Keypair};
-use solana_sdk::{pubkey::Pubkey, signer::Signer, transaction::Transaction, transport};
+use solana_sdk::{
+    account::Account, pubkey::Pubkey, signature::Keypair, signer::Signer, transaction::Transaction,
+    transport,
+};
 
 pub mod collateral;
 pub mod liquidity;
 pub mod market;
+pub mod obligation;
 pub mod provider;
+
+pub use collateral::CollateralInfo;
+pub use liquidity::LiquidityInfo;
+pub use market::MarketInfo;
+pub use obligation::ObligationInfo;
+pub use provider::ProviderActor;
 
 pub fn program_test() -> ProgramTest {
     ProgramTest::new(

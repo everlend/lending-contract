@@ -1,12 +1,13 @@
-use super::{collateral, get_account};
-use crate::utils::{create_mint, liquidity};
+use super::{collateral::CollateralInfo, get_account, liquidity::LiquidityInfo};
+use crate::utils::create_mint;
 use everlend_lending::{find_program_address, id, instruction, state::Market};
-use solana_program::pubkey::Pubkey;
-use solana_program::{borsh::get_packed_len, program_pack::Pack, system_instruction};
+use solana_program::{
+    borsh::get_packed_len, program_pack::Pack, pubkey::Pubkey, system_instruction,
+};
 use solana_program_test::ProgramTestContext;
-use solana_sdk::transaction::Transaction;
 use solana_sdk::{
     signature::{Keypair, Signer},
+    transaction::Transaction,
     transport,
 };
 
@@ -54,14 +55,14 @@ impl MarketInfo {
     pub async fn create_liquidity_token(
         &self,
         context: &mut ProgramTestContext,
-    ) -> transport::Result<liquidity::LiquidityInfo> {
+    ) -> transport::Result<LiquidityInfo> {
         let liquidity_tokens = self.get_data(context).await.liquidity_tokens;
 
         let (market_authority, _) =
             find_program_address(&everlend_lending::id(), &self.market.pubkey());
 
         let seed = format!("liquidity{:?}", liquidity_tokens);
-        let liquidity_info = liquidity::LiquidityInfo::new(&market_authority, &seed);
+        let liquidity_info = LiquidityInfo::new(&market_authority, &seed);
 
         create_mint(context, &liquidity_info.token_mint, &self.owner.pubkey())
             .await
@@ -78,14 +79,14 @@ impl MarketInfo {
     pub async fn create_collateral_token(
         &self,
         context: &mut ProgramTestContext,
-    ) -> transport::Result<collateral::CollateralInfo> {
+    ) -> transport::Result<CollateralInfo> {
         let collateral_tokens = self.get_data(context).await.collateral_tokens;
 
         let (market_authority, _) =
             find_program_address(&everlend_lending::id(), &self.market.pubkey());
 
         let seed = format!("collateral{:?}", collateral_tokens);
-        let collateral_info = collateral::CollateralInfo::new(&market_authority, &seed);
+        let collateral_info = CollateralInfo::new(&market_authority, &seed);
 
         create_mint(context, &collateral_info.token_mint, &self.owner.pubkey())
             .await
@@ -102,7 +103,7 @@ impl MarketInfo {
     pub async fn deposit(
         &self,
         context: &mut ProgramTestContext,
-        liquidity_info: &liquidity::LiquidityInfo,
+        liquidity_info: &LiquidityInfo,
         source: &Pubkey,
         destination: &Pubkey,
         amount: u64,
@@ -132,7 +133,7 @@ impl MarketInfo {
     pub async fn withdraw(
         &self,
         context: &mut ProgramTestContext,
-        liquidity_info: &liquidity::LiquidityInfo,
+        liquidity_info: &LiquidityInfo,
         source: &Pubkey,
         destination: &Pubkey,
         amount: u64,

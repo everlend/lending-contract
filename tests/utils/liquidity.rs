@@ -1,11 +1,13 @@
 use super::get_account;
-use everlend_lending::state::{Liquidity, LiquidityStatus};
-use everlend_lending::{id, instruction};
+use everlend_lending::{
+    id, instruction,
+    state::{Liquidity, LiquidityStatus},
+};
 use solana_program::{program_pack::Pack, pubkey::Pubkey, system_instruction};
 use solana_program_test::ProgramTestContext;
-use solana_sdk::transaction::Transaction;
 use solana_sdk::{
     signature::{Keypair, Signer},
+    transaction::Transaction,
     transport,
 };
 

@@ -7,14 +7,10 @@ use solana_program_test::*;
 use solana_sdk::signer::Signer;
 use utils::*;
 
-async fn setup() -> (
-    ProgramTestContext,
-    market::MarketInfo,
-    liquidity::LiquidityInfo,
-) {
+async fn setup() -> (ProgramTestContext, MarketInfo, LiquidityInfo) {
     let mut context = program_test().start_with_context().await;
 
-    let market_info = market::MarketInfo::new();
+    let market_info = MarketInfo::new();
     market_info.init(&mut context).await.unwrap();
 
     let liquidity_info = market_info
@@ -33,9 +29,9 @@ async fn setup() -> (
 #[tokio::test]
 async fn success() {
     let (mut context, market_info, liquidity_info) = setup().await;
-    let provider_info = provider::ProviderInfo::new();
+    let provider_actor = provider::ProviderActor::new();
 
-    let (source, destination) = provider_info
+    let (source, destination) = provider_actor
         .create_liquidity_accounts(&mut context, &liquidity_info)
         .await
         .unwrap();
@@ -57,7 +53,7 @@ async fn success() {
             &source.pubkey(),
             &destination.pubkey(),
             10000,
-            &provider_info.owner,
+            &provider_actor.owner,
         )
         .await
         .unwrap();
@@ -71,9 +67,9 @@ async fn success() {
 #[tokio::test]
 async fn two_deposits() {
     let (mut context, market_info, liquidity_info) = setup().await;
-    let provider_info = provider::ProviderInfo::new();
+    let provider_actor = provider::ProviderActor::new();
 
-    let (source, destination) = provider_info
+    let (source, destination) = provider_actor
         .create_liquidity_accounts(&mut context, &liquidity_info)
         .await
         .unwrap();
@@ -95,7 +91,7 @@ async fn two_deposits() {
             &source.pubkey(),
             &destination.pubkey(),
             10000,
-            &provider_info.owner,
+            &provider_actor.owner,
         )
         .await
         .unwrap();
@@ -107,7 +103,7 @@ async fn two_deposits() {
             &source.pubkey(),
             &destination.pubkey(),
             5000,
-            &provider_info.owner,
+            &provider_actor.owner,
         )
         .await
         .unwrap();

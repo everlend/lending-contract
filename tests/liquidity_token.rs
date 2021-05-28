@@ -6,10 +6,10 @@ use everlend_lending::state::LiquidityStatus;
 use solana_program_test::*;
 use utils::*;
 
-async fn setup() -> (ProgramTestContext, market::MarketInfo) {
+async fn setup() -> (ProgramTestContext, MarketInfo) {
     let mut context = program_test().start_with_context().await;
 
-    let market_info = market::MarketInfo::new();
+    let market_info = MarketInfo::new();
     market_info.init(&mut context).await.unwrap();
 
     (context, market_info)
