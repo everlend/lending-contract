@@ -1,7 +1,7 @@
 //! Instruction types
 
 use crate::{
-    find_program_address,
+    find_obligation_authority, find_program_address,
     state::{CollateralStatus, LiquidityStatus},
 };
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -34,6 +34,7 @@ pub enum LendingInstruction {
     /// [RS] Market owner
     /// [R] Market authority
     /// [R] Rent sysvar
+    /// [R] Sytem program
     /// [R] Token program id
     CreateLiquidityToken,
 
@@ -58,6 +59,7 @@ pub enum LendingInstruction {
     /// [RS] Market owner
     /// [R] Market authority
     /// [R] Rent sysvar
+    /// [R] Sytem program
     /// [R] Token program id
     CreateCollateralToken {
         /// Fractional initial collateralization ratio (multiplied by 10e9)
@@ -122,8 +124,10 @@ pub enum LendingInstruction {
     /// [R] Liquidity account
     /// [R] Collateral account
     /// [R] Market account
+    /// [R] Obligation authority (owner/market/liquidity/collateral combination)
     /// [RS] Obligation owner
     /// [R] Rent sysvar
+    /// [R] Sytem program
     /// [R] Token program id
     CreateObligation,
 
@@ -387,14 +391,18 @@ pub fn create_obligation(
 ) -> Result<Instruction, ProgramError> {
     let init_data = LendingInstruction::CreateObligation;
     let data = init_data.try_to_vec()?;
+    let (obligation_authority, _) =
+        find_obligation_authority(program_id, owner, market, liquidity, collateral);
 
     let accounts = vec![
         AccountMeta::new(*obligation, false),
         AccountMeta::new_readonly(*liquidity, false),
         AccountMeta::new_readonly(*collateral, false),
         AccountMeta::new_readonly(*market, false),
+        AccountMeta::new_readonly(obligation_authority, false),
         AccountMeta::new_readonly(*owner, true),
         AccountMeta::new_readonly(sysvar::rent::id(), false),
+        AccountMeta::new_readonly(system_program::id(), false),
     ];
 
     Ok(Instruction {

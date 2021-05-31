@@ -1,7 +1,7 @@
 //! Program state processor
 
 use crate::{error::LendingError, instruction::LendingInstruction};
-use crate::{find_program_address, state::*};
+use crate::{find_obligation_authority, find_program_address, state::*};
 use borsh::BorshDeserialize;
 use solana_program::program_pack::IsInitialized;
 use solana_program::{
@@ -87,13 +87,17 @@ impl Processor {
 
         // Create liquidity account
         let seed = format!("liquidity{:?}", market.liquidity_tokens);
+        let (authority, bump_seed) = find_program_address(program_id, market_info.key);
+        let signers_seeds = &[&market_info.key.to_bytes()[..32], &[bump_seed]];
+
         create_account_with_seed::<Liquidity>(
             program_id,
-            market_info.key,
             market_owner_info.clone(),
             liquidity_info.clone(),
             market_authority_info.clone(),
             &seed,
+            &authority,
+            &[signers_seeds],
             rent,
         )?;
 
@@ -211,13 +215,17 @@ impl Processor {
 
         // Create collateral account
         let seed = format!("collateral{:?}", market.collateral_tokens);
+        let (authority, bump_seed) = find_program_address(program_id, market_info.key);
+        let signers_seeds = &[&market_info.key.to_bytes()[..32], &[bump_seed]];
+
         create_account_with_seed::<Collateral>(
             program_id,
-            market_info.key,
             market_owner_info.clone(),
             collateral_info.clone(),
             market_authority_info.clone(),
             &seed,
+            &authority,
+            &[signers_seeds],
             rent,
         )?;
 
@@ -436,8 +444,10 @@ impl Processor {
         let liquidity_info = next_account_info(account_info_iter)?;
         let collateral_info = next_account_info(account_info_iter)?;
         let market_info = next_account_info(account_info_iter)?;
+        let obligation_authority_info = next_account_info(account_info_iter)?;
         let obligation_owner_info = next_account_info(account_info_iter)?;
         let rent_info = next_account_info(account_info_iter)?;
+        let _system_program_info = next_account_info(account_info_iter)?;
         let rent = &Rent::from_account_info(rent_info)?;
 
         if !obligation_owner_info.is_signer {
@@ -449,22 +459,69 @@ impl Processor {
             return Err(LendingError::InvalidAccountOwner.into());
         }
 
+        if liquidity_info.owner != program_id {
+            msg!("Liquidity provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
         if collateral_info.owner != program_id {
             msg!("Collateral provided is not owned by the market program");
             return Err(LendingError::InvalidAccountOwner.into());
         }
 
-        if obligation_info.owner != program_id {
-            msg!("Obligation provided is not owned by the market program");
-            return Err(LendingError::InvalidAccountOwner.into());
+        // Get liquidity state
+        let liquidity = Liquidity::unpack(&liquidity_info.data.borrow())?;
+
+        if liquidity.market != *market_info.key {
+            msg!("Liquidity market does not match the market provided");
+            return Err(ProgramError::InvalidArgument.into());
         }
 
-        assert_rent_exempt(rent, obligation_info)?;
-
-        if obligation_info.owner != program_id {
-            msg!("Obligation provided is not owned by the market program");
-            return Err(LendingError::InvalidAccountOwner.into());
+        if liquidity.status != LiquidityStatus::Active {
+            msg!("Liquidity does not active");
+            return Err(ProgramError::InvalidAccountData.into());
         }
+
+        // Get collateral state
+        let collateral = Collateral::unpack(&collateral_info.data.borrow())?;
+
+        if collateral.market != *market_info.key {
+            msg!("Collateral market does not match the market provided");
+            return Err(ProgramError::InvalidArgument.into());
+        }
+
+        if collateral.status != CollateralStatus::Active {
+            msg!("Collateral does not active");
+            return Err(ProgramError::InvalidAccountData.into());
+        }
+
+        let (obligation_authority, bump_seed) = find_obligation_authority(
+            program_id,
+            obligation_owner_info.key,
+            market_info.key,
+            liquidity_info.key,
+            collateral_info.key,
+        );
+        // TODO: refactor in the future
+        let signers_seeds = &[
+            &obligation_owner_info.key.to_bytes()[..32],
+            &market_info.key.to_bytes()[..32],
+            &liquidity_info.key.to_bytes()[..32],
+            &collateral_info.key.to_bytes()[..32],
+            &[bump_seed],
+        ];
+
+        // Create obligation account
+        create_account_with_seed::<Obligation>(
+            program_id,
+            obligation_owner_info.clone(),
+            obligation_info.clone(),
+            obligation_authority_info.clone(),
+            "obligation",
+            &obligation_authority,
+            &[signers_seeds],
+            rent,
+        )?;
 
         // Get obligation state
         let mut obligation = Obligation::unpack_unchecked(&obligation_info.data.borrow())?;
@@ -708,17 +765,15 @@ impl Processor {
 /// Create account with seed
 pub fn create_account_with_seed<'a, S: Pack>(
     program_id: &Pubkey,
-    market: &Pubkey,
     from: AccountInfo<'a>,
     to: AccountInfo<'a>,
     base: AccountInfo<'a>,
     seed: &str,
+    authority: &Pubkey,
+    signers_seeds: &[&[&[u8]]],
     rent: &Rent,
 ) -> ProgramResult {
-    let (authority, bump_seed) = find_program_address(program_id, market);
-    let signature = &[&market.to_bytes()[..32], &[bump_seed]];
-
-    if authority != *base.key {
+    if *authority != *base.key {
         return Err(ProgramError::InvalidSeeds);
     }
 
@@ -737,7 +792,7 @@ pub fn create_account_with_seed<'a, S: Pack>(
         program_id,
     );
 
-    invoke_signed(&ix, &[from, to, base], &[signature])
+    invoke_signed(&ix, &[from, to, base], signers_seeds)
 }
 
 /// Initialize SPL accont instruction.

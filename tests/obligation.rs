@@ -2,7 +2,7 @@
 
 mod utils;
 
-use everlend_lending::state::PROGRAM_VERSION;
+use everlend_lending::state::{CollateralStatus, LiquidityStatus, PROGRAM_VERSION};
 use solana_program_test::*;
 use solana_sdk::{signature::Keypair, signer::Signer};
 use utils::*;
@@ -28,6 +28,22 @@ async fn setup() -> (
         .await
         .unwrap();
 
+    liquidity_info
+        .update(&mut context, LiquidityStatus::Active, &market_info)
+        .await
+        .unwrap();
+
+    collateral_info
+        .update(
+            &mut context,
+            CollateralStatus::Active,
+            collateral::RATIO_INITIAL,
+            collateral::RATIO_HEALTHY,
+            &market_info,
+        )
+        .await
+        .unwrap();
+
     (context, market_info, liquidity_info, collateral_info)
 }
 
@@ -38,7 +54,7 @@ async fn prepare_borrower(
     collateral_info: &CollateralInfo,
     mint_amount: u64,
 ) -> (ObligationInfo, Keypair) {
-    let obligation_info = ObligationInfo::new();
+    let obligation_info = ObligationInfo::new(market_info, liquidity_info, collateral_info);
     obligation_info
         .create(context, &market_info, &liquidity_info, &collateral_info)
         .await
@@ -72,7 +88,7 @@ async fn prepare_borrower(
 async fn success() {
     let (mut context, market_info, liquidity_info, collateral_info) = setup().await;
 
-    let obligation_info = ObligationInfo::new();
+    let obligation_info = ObligationInfo::new(&market_info, &liquidity_info, &collateral_info);
     obligation_info
         .create(
             &mut context,

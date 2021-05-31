@@ -2,9 +2,10 @@ use super::{
     collateral::CollateralInfo, get_account, liquidity::LiquidityInfo, market::MarketInfo,
 };
 use everlend_lending::state::Obligation;
-use everlend_lending::{id, instruction};
+use everlend_lending::{find_obligation_authority, id, instruction};
+use solana_program::program_pack::Pack;
 use solana_program::pubkey::Pubkey;
-use solana_program::{program_pack::Pack, system_instruction};
+use solana_program::system_instruction;
 use solana_program_test::ProgramTestContext;
 use solana_sdk::transaction::Transaction;
 use solana_sdk::{
@@ -14,20 +15,34 @@ use solana_sdk::{
 
 #[derive(Debug)]
 pub struct ObligationInfo {
-    pub obligation: Keypair,
+    pub obligation_pubkey: Pubkey,
     pub owner: Keypair,
 }
 
 impl ObligationInfo {
-    pub fn new() -> Self {
+    pub fn new(
+        market_info: &MarketInfo,
+        liquidity_info: &LiquidityInfo,
+        collateral_info: &CollateralInfo,
+    ) -> Self {
+        let owner = Keypair::new();
+        let (obligation_authority, _) = find_obligation_authority(
+            &everlend_lending::id(),
+            &owner.pubkey(),
+            &market_info.market.pubkey(),
+            &liquidity_info.liquidity_pubkey,
+            &collateral_info.collateral_pubkey,
+        );
+
         Self {
-            obligation: Keypair::new(),
-            owner: Keypair::new(),
+            obligation_pubkey: Pubkey::create_with_seed(&obligation_authority, "obligation", &id())
+                .unwrap(),
+            owner,
         }
     }
 
     pub async fn get_data(&self, context: &mut ProgramTestContext) -> Obligation {
-        let obligation_account = get_account(context, &self.obligation.pubkey()).await;
+        let obligation_account = get_account(context, &self.obligation_pubkey).await;
         Obligation::unpack_unchecked(&obligation_account.data).unwrap()
     }
 
@@ -38,20 +53,17 @@ impl ObligationInfo {
         liquidity_info: &LiquidityInfo,
         collateral_info: &CollateralInfo,
     ) -> transport::Result<()> {
-        let rent = context.banks_client.get_rent().await.unwrap();
-
         let tx = Transaction::new_signed_with_payer(
             &[
-                system_instruction::create_account(
+                // Transfer a few lamports to cover fee for create account
+                system_instruction::transfer(
                     &context.payer.pubkey(),
-                    &self.obligation.pubkey(),
-                    rent.minimum_balance(Obligation::LEN),
-                    Obligation::LEN as u64,
-                    &id(),
+                    &self.owner.pubkey(),
+                    999999999,
                 ),
                 instruction::create_obligation(
                     &id(),
-                    &self.obligation.pubkey(),
+                    &self.obligation_pubkey,
                     &liquidity_info.liquidity_pubkey,
                     &collateral_info.collateral_pubkey,
                     &market_info.market.pubkey(),
@@ -60,7 +72,7 @@ impl ObligationInfo {
                 .unwrap(),
             ],
             Some(&context.payer.pubkey()),
-            &[&context.payer, &self.obligation, &self.owner],
+            &[&context.payer, &self.owner],
             context.last_blockhash,
         );
 
@@ -79,7 +91,7 @@ impl ObligationInfo {
             &[instruction::obligation_collateral_deposit(
                 &id(),
                 amount,
-                &self.obligation.pubkey(),
+                &self.obligation_pubkey,
                 &collateral_info.collateral_pubkey,
                 source,
                 &collateral_info.token_account.pubkey(),
@@ -107,7 +119,7 @@ impl ObligationInfo {
             &[instruction::obligation_collateral_withdraw(
                 &id(),
                 amount,
-                &self.obligation.pubkey(),
+                &self.obligation_pubkey,
                 &collateral_info.collateral_pubkey,
                 destination,
                 &collateral_info.token_account.pubkey(),
