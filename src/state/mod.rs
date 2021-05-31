@@ -16,3 +16,6 @@ pub const UNINITIALIZED_VERSION: u8 = 0;
 
 /// Current version of the program and all new accounts created
 pub const PROGRAM_VERSION: u8 = 1;
+
+/// Ratio power
+pub const RATIO_POWER: u64 = u64::pow(10, 9);

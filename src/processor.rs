@@ -362,7 +362,11 @@ impl Processor {
             pool_mint_info.clone(),
             destination_info.clone(),
             market_authority_info.clone(),
-            liquidity.calc_deposit_exchange_amount(amount, token_account_amount, pool_mint_supply),
+            liquidity.calc_deposit_exchange_amount(
+                amount,
+                token_account_amount,
+                pool_mint_supply,
+            )?,
             &[signers_seeds],
         )?;
 
@@ -430,7 +434,11 @@ impl Processor {
             token_account_info.clone(),
             destination_info.clone(),
             market_authority_info.clone(),
-            liquidity.calc_withdraw_exchange_amount(amount, token_account_amount, pool_mint_supply),
+            liquidity.calc_withdraw_exchange_amount(
+                amount,
+                token_account_amount,
+                pool_mint_supply,
+            )?,
             &[signers_seeds],
         )?;
 
@@ -591,7 +599,7 @@ impl Processor {
             return Err(ProgramError::InvalidArgument.into());
         }
 
-        obligation.collateral_deposit(amount);
+        obligation.collateral_deposit(amount)?;
         Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
 
         // Transfer liquidity from source borrower to token account
@@ -668,8 +676,13 @@ impl Processor {
         }
 
         // Calculation of available funds for withdrawal
+        let withdrawal_limit = obligation.calc_withdrawal_limit(collateral.ratio_initial)?;
+        if amount > withdrawal_limit {
+            msg!("Withdrawal limit exceeded");
+            return Err(ProgramError::InvalidArgument.into());
+        }
 
-        obligation.collateral_withdraw(amount, collateral.ratio_initial)?;
+        obligation.collateral_withdraw(amount)?;
         Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
 
         let (_, bump_seed) = find_program_address(program_id, market_info.key);

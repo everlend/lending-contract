@@ -1,4 +1,6 @@
 //! Program state definitions
+use crate::error::LendingError;
+
 use super::*;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use solana_program::{
@@ -8,8 +10,6 @@ use solana_program::{
     program_pack::{IsInitialized, Pack, Sealed},
     pubkey::Pubkey,
 };
-
-const RATIO_POWER: u64 = u64::pow(10, 9);
 
 /// Obligation
 #[repr(C)]
@@ -44,23 +44,40 @@ impl Obligation {
     }
 
     /// Increase amount of deposited collateral
-    pub fn collateral_deposit(&mut self, amount: u64) {
-        self.amount_collateral_deposited += amount;
+    pub fn collateral_deposit(&mut self, amount: u64) -> ProgramResult {
+        self.amount_collateral_deposited = self
+            .amount_collateral_deposited
+            .checked_add(amount)
+            .ok_or(LendingError::CalculationFailure)?;
+
+        Ok(())
     }
 
     /// Decrease amount of deposited collateral
-    pub fn collateral_withdraw(&mut self, amount: u64, ratio_initial: u64) -> ProgramResult {
-        // deposited - borrowed / ratio_initial
-        let withdrawal_limit = self.amount_collateral_deposited
-            - self.amount_liquidity_borrowed * RATIO_POWER / ratio_initial;
+    pub fn collateral_withdraw(&mut self, amount: u64) -> ProgramResult {
+        self.amount_collateral_deposited = self
+            .amount_collateral_deposited
+            .checked_sub(amount)
+            .ok_or(LendingError::CalculationFailure)?;
 
-        if amount > withdrawal_limit {
-            msg!("Withdrawal limit exceeded");
-            Err(ProgramError::InvalidArgument.into())
-        } else {
-            self.amount_collateral_deposited -= amount;
-            Ok(())
-        }
+        Ok(())
+    }
+
+    /// Calculation of available funds for withdrawal
+    pub fn calc_withdrawal_limit(&self, ratio_initial: u64) -> Result<u64, ProgramError> {
+        // deposited - borrowed / ratio_initial
+        let result = self
+            .amount_collateral_deposited
+            .checked_sub(
+                self.amount_liquidity_borrowed
+                    .checked_mul(RATIO_POWER * 100)
+                    .ok_or(LendingError::CalculationFailure)?
+                    .checked_div(ratio_initial)
+                    .ok_or(LendingError::CalculationFailure)?,
+            )
+            .ok_or(LendingError::CalculationFailure)?;
+
+        Ok(result)
     }
 }
 
