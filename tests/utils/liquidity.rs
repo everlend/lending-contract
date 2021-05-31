@@ -40,8 +40,7 @@ impl LiquidityInfo {
     pub async fn create(
         &self,
         context: &mut ProgramTestContext,
-        market_pubkey: &Pubkey,
-        market_owner: &Keypair,
+        market_info: &MarketInfo,
     ) -> transport::Result<()> {
         let rent = context.banks_client.get_rent().await.unwrap();
 
@@ -50,7 +49,7 @@ impl LiquidityInfo {
                 // Transfer a few lamports to cover fee for create account
                 system_instruction::transfer(
                     &context.payer.pubkey(),
-                    &market_owner.pubkey(),
+                    &market_info.owner.pubkey(),
                     999999999,
                 ),
                 system_instruction::create_account(
@@ -73,8 +72,8 @@ impl LiquidityInfo {
                     &self.token_mint.pubkey(),
                     &self.token_account.pubkey(),
                     &self.pool_mint.pubkey(),
-                    &market_pubkey,
-                    &market_owner.pubkey(),
+                    &market_info.market.pubkey(),
+                    &market_info.owner.pubkey(),
                 )
                 .unwrap(),
             ],
@@ -83,7 +82,7 @@ impl LiquidityInfo {
                 &context.payer,
                 &self.token_account,
                 &self.pool_mint,
-                &market_owner,
+                &market_info.owner,
             ],
             context.last_blockhash,
         );
@@ -95,18 +94,19 @@ impl LiquidityInfo {
         &self,
         context: &mut ProgramTestContext,
         status: LiquidityStatus,
-        market_owner: &Keypair,
+        market_info: &MarketInfo,
     ) -> transport::Result<()> {
         let tx = Transaction::new_signed_with_payer(
             &[instruction::update_liquidity_token(
                 &id(),
                 status,
                 &self.liquidity_pubkey,
-                &market_owner.pubkey(),
+                &market_info.market.pubkey(),
+                &market_info.owner.pubkey(),
             )
             .unwrap()],
             Some(&context.payer.pubkey()),
-            &[&context.payer, &market_owner],
+            &[&context.payer, &market_info.owner],
             context.last_blockhash,
         );
 

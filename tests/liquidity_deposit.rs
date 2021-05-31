@@ -19,7 +19,7 @@ async fn setup() -> (ProgramTestContext, MarketInfo, LiquidityInfo) {
         .unwrap();
 
     liquidity_info
-        .update(&mut context, LiquidityStatus::Active, &market_info.owner)
+        .update(&mut context, LiquidityStatus::Active, &market_info)
         .await
         .unwrap();
 

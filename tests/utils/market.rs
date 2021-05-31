@@ -62,10 +62,7 @@ impl MarketInfo {
             .await
             .unwrap();
 
-        liquidity_info
-            .create(context, &self.market.pubkey(), &self.owner)
-            .await
-            .unwrap();
+        liquidity_info.create(context, self).await.unwrap();
 
         Ok(liquidity_info)
     }
@@ -82,10 +79,7 @@ impl MarketInfo {
             .await
             .unwrap();
 
-        collateral_info
-            .create(context, &self.market.pubkey(), &self.owner)
-            .await
-            .unwrap();
+        collateral_info.create(context, self).await.unwrap();
 
         Ok(collateral_info)
     }

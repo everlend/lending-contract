@@ -41,6 +41,7 @@ pub enum LendingInstruction {
     ///
     /// Accounts:
     /// [W] Liquidity account
+    /// [W] Market account
     /// [RS] Market owner
     UpdateLiquidityToken {
         /// New status for liquidity token
@@ -69,6 +70,7 @@ pub enum LendingInstruction {
     ///
     /// Accounts:
     /// [W] Collateral account
+    /// [W] Market account
     /// [RS] Market owner
     UpdateCollateralToken {
         /// New status for collateral token
@@ -218,6 +220,7 @@ pub fn update_liquidity_token(
     program_id: &Pubkey,
     status: LiquidityStatus,
     liquidity: &Pubkey,
+    market: &Pubkey,
     market_owner: &Pubkey,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LendingInstruction::UpdateLiquidityToken { status };
@@ -225,6 +228,7 @@ pub fn update_liquidity_token(
 
     let accounts = vec![
         AccountMeta::new(*liquidity, false),
+        AccountMeta::new_readonly(*market, false),
         AccountMeta::new_readonly(*market_owner, true),
     ];
 
@@ -279,6 +283,7 @@ pub fn update_collateral_token(
     ratio_initial: u64,
     ratio_healthy: u64,
     collateral: &Pubkey,
+    market: &Pubkey,
     market_owner: &Pubkey,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LendingInstruction::UpdateCollateralToken {
@@ -290,6 +295,7 @@ pub fn update_collateral_token(
 
     let accounts = vec![
         AccountMeta::new(*collateral, false),
+        AccountMeta::new_readonly(*market, false),
         AccountMeta::new_readonly(*market_owner, true),
     ];
 

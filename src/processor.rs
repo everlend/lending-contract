@@ -142,14 +142,28 @@ impl Processor {
     ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let liquidity_info = next_account_info(account_info_iter)?;
+        let market_info = next_account_info(account_info_iter)?;
         let market_owner_info = next_account_info(account_info_iter)?;
 
         if !market_owner_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature);
         }
 
+        // Get market state
+        let market = Market::unpack(&market_info.data.borrow())?;
+
+        if market.owner != *market_owner_info.key {
+            msg!("Market owner provided does not match owner in the market state");
+            return Err(ProgramError::InvalidArgument.into());
+        }
+
         // Get liquidity state
         let mut liquidity = Liquidity::unpack(&liquidity_info.data.borrow())?;
+
+        if liquidity.market != *market_info.key {
+            msg!("Liquidity market does not match the market provided");
+            return Err(ProgramError::InvalidArgument.into());
+        }
 
         // Update liquidity state
         liquidity.status = status;
@@ -245,14 +259,28 @@ impl Processor {
     ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let collateral_info = next_account_info(account_info_iter)?;
+        let market_info = next_account_info(account_info_iter)?;
         let market_owner_info = next_account_info(account_info_iter)?;
 
         if !market_owner_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature);
         }
 
+        // Get market state
+        let market = Market::unpack(&market_info.data.borrow())?;
+
+        if market.owner != *market_owner_info.key {
+            msg!("Market owner provided does not match owner in the market state");
+            return Err(ProgramError::InvalidArgument.into());
+        }
+
         // Get collateral state
         let mut collateral = Collateral::unpack(&collateral_info.data.borrow())?;
+
+        if collateral.market != *market_info.key {
+            msg!("Collateral market does not match the market provided");
+            return Err(ProgramError::InvalidArgument.into());
+        }
 
         // Update collateral state
         collateral.status = status;
@@ -288,6 +316,11 @@ impl Processor {
 
         // Get liquidity state
         let liquidity = Liquidity::unpack(&liquidity_info.data.borrow())?;
+
+        if liquidity.market != *market_info.key {
+            msg!("Liquidity market does not match the market provided");
+            return Err(ProgramError::InvalidArgument.into());
+        }
 
         if liquidity.token_account != *token_account_info.key {
             msg!("Liquidity token account does not match the token account provided");
@@ -352,6 +385,11 @@ impl Processor {
 
         // Get liquidity state
         let liquidity = Liquidity::unpack(&liquidity_info.data.borrow())?;
+
+        if liquidity.market != *market_info.key {
+            msg!("Liquidity market does not match the market provided");
+            return Err(ProgramError::InvalidArgument.into());
+        }
 
         if liquidity.token_account != *token_account_info.key {
             msg!("Liquidity token account does not match the token account provided");

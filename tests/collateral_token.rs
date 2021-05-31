@@ -77,7 +77,7 @@ async fn update_token() {
             CollateralStatus::Active,
             NEW_RATIO_INITIAL,
             NEW_RATIO_HEALTHY,
-            &market_info.owner,
+            &market_info,
         )
         .await
         .unwrap();
