@@ -233,7 +233,7 @@ async fn liquidity_borrow() {
         .await
         .unwrap();
 
-    let borrow_ammount = DEPOSIT_AMOUNT * collateral::RATIO_INITIAL / (100 * RATIO_POWER);
+    let borrow_ammount = DEPOSIT_AMOUNT * collateral::RATIO_INITIAL / RATIO_POWER;
     println!("Borrow amount: {}", borrow_ammount);
     obligation_info
         .liquidity_borrow(
@@ -287,7 +287,7 @@ async fn liquidity_repay() {
         .await
         .unwrap();
 
-    let borrow_ammount = DEPOSIT_AMOUNT * collateral::RATIO_INITIAL / (100 * RATIO_POWER);
+    let borrow_ammount = DEPOSIT_AMOUNT * collateral::RATIO_INITIAL / RATIO_POWER;
     println!("Borrow amount: {}", borrow_ammount);
     obligation_info
         .liquidity_borrow(

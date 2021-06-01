@@ -18,4 +18,4 @@ pub const UNINITIALIZED_VERSION: u8 = 0;
 pub const PROGRAM_VERSION: u8 = 1;
 
 /// Ratio power
-pub const RATIO_POWER: u64 = u64::pow(10, 9);
+pub const RATIO_POWER: u64 = 1_000_000_000;

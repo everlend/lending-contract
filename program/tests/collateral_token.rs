@@ -2,7 +2,7 @@
 
 mod utils;
 
-use everlend_lending::state::CollateralStatus;
+use everlend_lending::state::{CollateralStatus, RATIO_POWER};
 use solana_program_test::*;
 use utils::*;
 
@@ -68,8 +68,8 @@ async fn update_token() {
         .await
         .unwrap();
 
-    const NEW_RATIO_INITIAL: u64 = 35 * u64::pow(10, 9);
-    const NEW_RATIO_HEALTHY: u64 = 60 * u64::pow(10, 9);
+    const NEW_RATIO_INITIAL: u64 = 35 * RATIO_POWER / 100;
+    const NEW_RATIO_HEALTHY: u64 = 60 * RATIO_POWER / 100;
 
     collateral_info
         .update(

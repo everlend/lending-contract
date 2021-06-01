@@ -1,7 +1,7 @@
 use super::{get_account, market::MarketInfo};
 use everlend_lending::{
     find_program_address, id, instruction,
-    state::{Collateral, CollateralStatus},
+    state::{Collateral, CollateralStatus, RATIO_POWER},
 };
 use solana_program::{program_pack::Pack, pubkey::Pubkey, system_instruction};
 use solana_program_test::ProgramTestContext;
@@ -11,8 +11,8 @@ use solana_sdk::{
     transport,
 };
 
-pub const RATIO_INITIAL: u64 = 50 * u64::pow(10, 9);
-pub const RATIO_HEALTHY: u64 = 75 * u64::pow(10, 9);
+pub const RATIO_INITIAL: u64 = 50 * RATIO_POWER / 100; // 0.5 * 10^9
+pub const RATIO_HEALTHY: u64 = 75 * RATIO_POWER / 100; // 0.75 * 10^9
 
 #[derive(Debug)]
 pub struct CollateralInfo {

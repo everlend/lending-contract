@@ -90,7 +90,7 @@ impl Obligation {
             .amount_collateral_deposited
             .checked_sub(
                 self.amount_liquidity_borrowed
-                    .checked_mul(RATIO_POWER * 100)
+                    .checked_mul(RATIO_POWER)
                     .ok_or(LendingError::CalculationFailure)?
                     .checked_div(ratio_initial)
                     .ok_or(LendingError::CalculationFailure)?,
@@ -107,7 +107,7 @@ impl Obligation {
             .amount_collateral_deposited
             .checked_mul(ratio_initial)
             .ok_or(LendingError::CalculationFailure)?
-            .checked_div(RATIO_POWER * 100)
+            .checked_div(RATIO_POWER)
             .ok_or(LendingError::CalculationFailure)?
             .checked_sub(self.amount_liquidity_borrowed)
             .ok_or(LendingError::CalculationFailure)?;
