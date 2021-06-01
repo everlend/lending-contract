@@ -161,6 +161,38 @@ pub enum LendingInstruction {
         /// Amount of collateral to withdraw
         amount: u64,
     },
+
+    /// Borrow liquidity token from obligation
+    ///
+    /// Accounts:
+    /// [W] Obligation account
+    /// [R] Liquidity account
+    /// [R] Collateral account
+    /// [W] Destination account (for liquidity token mint)
+    /// [W] Liquidity token account
+    /// [R] Market account
+    /// [RS] Obligation owner
+    /// [R] Market authority
+    /// [R] Token program id
+    ObligationLiquidityBorrow {
+        /// Amount of liquidity to borrow
+        amount: u64,
+    },
+
+    /// Repay liquidity token to obligation
+    ///
+    /// Accounts:
+    /// [W] Obligation account
+    /// [R] Liquidity account
+    /// [W] Source account (for liquidity token mint)
+    /// [W] Liquidity token account
+    /// [R] Market account
+    /// [RS] User transfer authority
+    /// [R] Token program id
+    ObligationLiquidityRepay {
+        /// Amount of liquidity to repay
+        amount: u64,
+    },
 }
 
 /// Create `InitMarket` instruction
@@ -419,7 +451,7 @@ pub fn obligation_collateral_deposit(
     obligation: &Pubkey,
     collateral: &Pubkey,
     source: &Pubkey,
-    token_account: &Pubkey,
+    collateral_token_account: &Pubkey,
     market: &Pubkey,
     user_transfer_authority: &Pubkey,
 ) -> Result<Instruction, ProgramError> {
@@ -430,7 +462,7 @@ pub fn obligation_collateral_deposit(
         AccountMeta::new(*obligation, false),
         AccountMeta::new_readonly(*collateral, false),
         AccountMeta::new(*source, false),
-        AccountMeta::new(*token_account, false),
+        AccountMeta::new(*collateral_token_account, false),
         AccountMeta::new_readonly(*market, false),
         AccountMeta::new_readonly(*user_transfer_authority, true),
         AccountMeta::new_readonly(spl_token::id(), false),
@@ -450,7 +482,7 @@ pub fn obligation_collateral_withdraw(
     obligation: &Pubkey,
     collateral: &Pubkey,
     destination: &Pubkey,
-    token_account: &Pubkey,
+    collateral_token_account: &Pubkey,
     market: &Pubkey,
     obligation_owner: &Pubkey,
 ) -> Result<Instruction, ProgramError> {
@@ -462,10 +494,76 @@ pub fn obligation_collateral_withdraw(
         AccountMeta::new(*obligation, false),
         AccountMeta::new_readonly(*collateral, false),
         AccountMeta::new(*destination, false),
-        AccountMeta::new(*token_account, false),
+        AccountMeta::new(*collateral_token_account, false),
         AccountMeta::new_readonly(*market, false),
         AccountMeta::new_readonly(*obligation_owner, true),
         AccountMeta::new_readonly(market_authority, false),
+        AccountMeta::new_readonly(spl_token::id(), false),
+    ];
+
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts,
+        data,
+    })
+}
+
+/// Create `ObligationLiquidityBorrow` instruction
+pub fn obligation_liquidity_borrow(
+    program_id: &Pubkey,
+    amount: u64,
+    obligation: &Pubkey,
+    liquidity: &Pubkey,
+    collateral: &Pubkey,
+    destination: &Pubkey,
+    liquidity_token_account: &Pubkey,
+    market: &Pubkey,
+    obligation_owner: &Pubkey,
+) -> Result<Instruction, ProgramError> {
+    let init_data = LendingInstruction::ObligationLiquidityBorrow { amount };
+    let data = init_data.try_to_vec()?;
+    let (market_authority, _) = find_program_address(program_id, market);
+
+    let accounts = vec![
+        AccountMeta::new(*obligation, false),
+        AccountMeta::new_readonly(*liquidity, false),
+        AccountMeta::new_readonly(*collateral, false),
+        AccountMeta::new(*destination, false),
+        AccountMeta::new(*liquidity_token_account, false),
+        AccountMeta::new_readonly(*market, false),
+        AccountMeta::new_readonly(*obligation_owner, true),
+        AccountMeta::new_readonly(market_authority, false),
+        AccountMeta::new_readonly(spl_token::id(), false),
+    ];
+
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts,
+        data,
+    })
+}
+
+/// Create `ObligationLiquidityRepay` instruction
+pub fn obligation_liquidity_repay(
+    program_id: &Pubkey,
+    amount: u64,
+    obligation: &Pubkey,
+    liquidity: &Pubkey,
+    source: &Pubkey,
+    liquidity_token_account: &Pubkey,
+    market: &Pubkey,
+    user_transfer_authority: &Pubkey,
+) -> Result<Instruction, ProgramError> {
+    let init_data = LendingInstruction::ObligationLiquidityRepay { amount };
+    let data = init_data.try_to_vec()?;
+
+    let accounts = vec![
+        AccountMeta::new(*obligation, false),
+        AccountMeta::new_readonly(*liquidity, false),
+        AccountMeta::new(*source, false),
+        AccountMeta::new(*liquidity_token_account, false),
+        AccountMeta::new_readonly(*market, false),
+        AccountMeta::new_readonly(*user_transfer_authority, true),
         AccountMeta::new_readonly(spl_token::id(), false),
     ];
 

@@ -63,6 +63,26 @@ impl Obligation {
         Ok(())
     }
 
+    /// Increase amount of borrowed liquidity
+    pub fn liquidity_borrow(&mut self, amount: u64) -> ProgramResult {
+        self.amount_liquidity_borrowed = self
+            .amount_liquidity_borrowed
+            .checked_add(amount)
+            .ok_or(LendingError::CalculationFailure)?;
+
+        Ok(())
+    }
+
+    /// Decrease amount of borrowed liquidity
+    pub fn liquidity_repay(&mut self, amount: u64) -> ProgramResult {
+        self.amount_liquidity_borrowed = self
+            .amount_liquidity_borrowed
+            .checked_sub(amount)
+            .ok_or(LendingError::CalculationFailure)?;
+
+        Ok(())
+    }
+
     /// Calculation of available funds for withdrawal
     pub fn calc_withdrawal_limit(&self, ratio_initial: u64) -> Result<u64, ProgramError> {
         // deposited - borrowed / ratio_initial
@@ -75,6 +95,21 @@ impl Obligation {
                     .checked_div(ratio_initial)
                     .ok_or(LendingError::CalculationFailure)?,
             )
+            .ok_or(LendingError::CalculationFailure)?;
+
+        Ok(result)
+    }
+
+    /// Calculation of available funds for borrowing
+    pub fn calc_borrowing_limit(&self, ratio_initial: u64) -> Result<u64, ProgramError> {
+        // deposited * ratio_initial - borrowed
+        let result = self
+            .amount_collateral_deposited
+            .checked_mul(ratio_initial)
+            .ok_or(LendingError::CalculationFailure)?
+            .checked_div(RATIO_POWER * 100)
+            .ok_or(LendingError::CalculationFailure)?
+            .checked_sub(self.amount_liquidity_borrowed)
             .ok_or(LendingError::CalculationFailure)?;
 
         Ok(result)

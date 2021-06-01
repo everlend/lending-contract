@@ -134,4 +134,62 @@ impl ObligationInfo {
 
         context.banks_client.process_transaction(tx).await
     }
+
+    pub async fn liquidity_borrow(
+        &self,
+        context: &mut ProgramTestContext,
+        market_info: &MarketInfo,
+        liquidity_info: &LiquidityInfo,
+        collateral_info: &CollateralInfo,
+        amount: u64,
+        destination: &Pubkey,
+    ) -> transport::Result<()> {
+        let tx = Transaction::new_signed_with_payer(
+            &[instruction::obligation_liquidity_borrow(
+                &id(),
+                amount,
+                &self.obligation_pubkey,
+                &liquidity_info.liquidity_pubkey,
+                &collateral_info.collateral_pubkey,
+                destination,
+                &liquidity_info.token_account.pubkey(),
+                &market_info.market.pubkey(),
+                &self.owner.pubkey(),
+            )
+            .unwrap()],
+            Some(&context.payer.pubkey()),
+            &[&context.payer, &self.owner],
+            context.last_blockhash,
+        );
+
+        context.banks_client.process_transaction(tx).await
+    }
+
+    pub async fn liquidity_repay(
+        &self,
+        context: &mut ProgramTestContext,
+        market_info: &MarketInfo,
+        liquidity_info: &LiquidityInfo,
+        amount: u64,
+        source: &Pubkey,
+    ) -> transport::Result<()> {
+        let tx = Transaction::new_signed_with_payer(
+            &[instruction::obligation_liquidity_repay(
+                &id(),
+                amount,
+                &self.obligation_pubkey,
+                &liquidity_info.liquidity_pubkey,
+                source,
+                &liquidity_info.token_account.pubkey(),
+                &market_info.market.pubkey(),
+                &self.owner.pubkey(),
+            )
+            .unwrap()],
+            Some(&context.payer.pubkey()),
+            &[&context.payer, &self.owner],
+            context.last_blockhash,
+        );
+
+        context.banks_client.process_transaction(tx).await
+    }
 }

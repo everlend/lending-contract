@@ -558,7 +558,7 @@ impl Processor {
         let obligation_info = next_account_info(account_info_iter)?;
         let collateral_info = next_account_info(account_info_iter)?;
         let source_info = next_account_info(account_info_iter)?;
-        let token_account_info = next_account_info(account_info_iter)?;
+        let collateral_token_account_info = next_account_info(account_info_iter)?;
         let market_info = next_account_info(account_info_iter)?;
         let user_transfer_authority_info = next_account_info(account_info_iter)?;
         let _token_program_info = next_account_info(account_info_iter)?;
@@ -594,7 +594,7 @@ impl Processor {
         // Get collateral state
         let collateral = Collateral::unpack(&collateral_info.data.borrow())?;
 
-        if collateral.token_account != *token_account_info.key {
+        if collateral.token_account != *collateral_token_account_info.key {
             msg!("Collateral token account does not match the token account provided");
             return Err(ProgramError::InvalidArgument.into());
         }
@@ -602,10 +602,10 @@ impl Processor {
         obligation.collateral_deposit(amount)?;
         Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
 
-        // Transfer liquidity from source borrower to token account
+        // Transfer collateral from source borrower to token account
         spl_token_transfer(
             source_info.clone(),
-            token_account_info.clone(),
+            collateral_token_account_info.clone(),
             user_transfer_authority_info.clone(),
             amount,
             &[],
@@ -624,7 +624,7 @@ impl Processor {
         let obligation_info = next_account_info(account_info_iter)?;
         let collateral_info = next_account_info(account_info_iter)?;
         let destination_info = next_account_info(account_info_iter)?;
-        let token_account_info = next_account_info(account_info_iter)?;
+        let collateral_token_account_info = next_account_info(account_info_iter)?;
         let market_info = next_account_info(account_info_iter)?;
         let obligation_owner_info = next_account_info(account_info_iter)?;
         let market_authority_info = next_account_info(account_info_iter)?;
@@ -670,7 +670,7 @@ impl Processor {
         // Get collateral state
         let collateral = Collateral::unpack(&collateral_info.data.borrow())?;
 
-        if collateral.token_account != *token_account_info.key {
+        if collateral.token_account != *collateral_token_account_info.key {
             msg!("Collateral token account does not match the token account provided");
             return Err(ProgramError::InvalidArgument.into());
         }
@@ -688,13 +688,184 @@ impl Processor {
         let (_, bump_seed) = find_program_address(program_id, market_info.key);
         let signers_seeds = &[&market_info.key.to_bytes()[..32], &[bump_seed]];
 
-        // Transfer liquidity from source borrower to token account
+        // Transfer collateral from token account to destination borrower
         spl_token_transfer(
-            token_account_info.clone(),
+            collateral_token_account_info.clone(),
             destination_info.clone(),
             market_authority_info.clone(),
             amount,
             &[signers_seeds],
+        )?;
+
+        Ok(())
+    }
+
+    /// Process ObligationLiquidityBorrow instruction
+    pub fn obligation_liquidity_borrow(
+        program_id: &Pubkey,
+        amount: u64,
+        accounts: &[AccountInfo],
+    ) -> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let obligation_info = next_account_info(account_info_iter)?;
+        let liquidity_info = next_account_info(account_info_iter)?;
+        let collateral_info = next_account_info(account_info_iter)?;
+        let destination_info = next_account_info(account_info_iter)?;
+        let liquidity_token_account_info = next_account_info(account_info_iter)?;
+        let market_info = next_account_info(account_info_iter)?;
+        let obligation_owner_info = next_account_info(account_info_iter)?;
+        let market_authority_info = next_account_info(account_info_iter)?;
+        let _token_program_info = next_account_info(account_info_iter)?;
+
+        if !obligation_owner_info.is_signer {
+            return Err(ProgramError::MissingRequiredSignature.into());
+        }
+
+        if market_info.owner != program_id {
+            msg!("Market provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
+        if liquidity_info.owner != program_id {
+            msg!("Liquidity provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
+        if collateral_info.owner != program_id {
+            msg!("Collateral provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
+        if obligation_info.owner != program_id {
+            msg!("Obligation provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
+        // Get obligation state
+        let mut obligation = Obligation::unpack(&obligation_info.data.borrow())?;
+
+        if obligation.owner != *obligation_owner_info.key {
+            msg!("Obligation owner does not match the owner provided");
+            return Err(ProgramError::InvalidArgument.into());
+        }
+
+        if obligation.liquidity != *liquidity_info.key {
+            msg!("Obligation liquidity does not match the liquidity provided");
+            return Err(ProgramError::InvalidArgument.into());
+        }
+
+        if obligation.collateral != *collateral_info.key {
+            msg!("Obligation collateral does not match the collateral provided");
+            return Err(ProgramError::InvalidArgument.into());
+        }
+
+        if obligation.market != *market_info.key {
+            msg!("Obligation market does not match the market provided");
+            return Err(ProgramError::InvalidArgument.into());
+        }
+
+        // Get collateral state
+        let collateral = Collateral::unpack(&collateral_info.data.borrow())?;
+
+        // Get liquidity state
+        let liquidity = Liquidity::unpack(&liquidity_info.data.borrow())?;
+
+        if liquidity.token_account != *liquidity_token_account_info.key {
+            msg!("Liquidity token account does not match the token account provided");
+            return Err(ProgramError::InvalidArgument.into());
+        }
+
+        // Calculation of available funds for borrowing
+        let borrowing_limit = obligation.calc_borrowing_limit(collateral.ratio_initial)?;
+        if amount > borrowing_limit {
+            msg!("Borrowing limit exceeded");
+            return Err(ProgramError::InvalidArgument.into());
+        }
+
+        obligation.liquidity_borrow(amount)?;
+        Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
+
+        let (_, bump_seed) = find_program_address(program_id, market_info.key);
+        let signers_seeds = &[&market_info.key.to_bytes()[..32], &[bump_seed]];
+
+        // Transfer liquidity from token account to destination borrower
+        spl_token_transfer(
+            liquidity_token_account_info.clone(),
+            destination_info.clone(),
+            market_authority_info.clone(),
+            amount,
+            &[signers_seeds],
+        )?;
+
+        Ok(())
+    }
+
+    /// Process ObligationLiquidityRepay instruction
+    pub fn obligation_liquidity_repay(
+        program_id: &Pubkey,
+        amount: u64,
+        accounts: &[AccountInfo],
+    ) -> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let obligation_info = next_account_info(account_info_iter)?;
+        let liquidity_info = next_account_info(account_info_iter)?;
+        let source_info = next_account_info(account_info_iter)?;
+        let liquidity_token_account_info = next_account_info(account_info_iter)?;
+        let market_info = next_account_info(account_info_iter)?;
+        let user_transfer_authority_info = next_account_info(account_info_iter)?;
+        let _token_program_info = next_account_info(account_info_iter)?;
+
+        if market_info.owner != program_id {
+            msg!("Market provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
+        if liquidity_info.owner != program_id {
+            msg!("Liquidity provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
+        if obligation_info.owner != program_id {
+            msg!("Obligation provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
+        // Get obligation state
+        let mut obligation = Obligation::unpack(&obligation_info.data.borrow())?;
+
+        if obligation.liquidity != *liquidity_info.key {
+            msg!("Obligation liquidity does not match the liquidity provided");
+            return Err(ProgramError::InvalidArgument.into());
+        }
+
+        if obligation.market != *market_info.key {
+            msg!("Obligation market does not match the market provided");
+            return Err(ProgramError::InvalidArgument.into());
+        }
+
+        // Get liquidity state
+        let liquidity = Liquidity::unpack(&liquidity_info.data.borrow())?;
+
+        if liquidity.token_account != *liquidity_token_account_info.key {
+            msg!("Collateral token account does not match the token account provided");
+            return Err(ProgramError::InvalidArgument.into());
+        }
+
+        let repay_limit = obligation.amount_liquidity_borrowed;
+        if amount > repay_limit {
+            msg!("Repay limit exceeded");
+            return Err(ProgramError::InvalidArgument.into());
+        }
+        obligation.liquidity_repay(amount)?;
+        Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
+
+        // Transfer liquidity from source borrower to token account
+        spl_token_transfer(
+            source_info.clone(),
+            liquidity_token_account_info.clone(),
+            user_transfer_authority_info.clone(),
+            amount,
+            &[],
         )?;
 
         Ok(())
@@ -770,6 +941,16 @@ impl Processor {
             LendingInstruction::ObligationCollateralWithdraw { amount } => {
                 msg!("LendingInstruction: ObligationCollateralWithdraw");
                 Self::obligation_collateral_withdraw(program_id, amount, accounts)
+            }
+
+            LendingInstruction::ObligationLiquidityBorrow { amount } => {
+                msg!("LendingInstruction: ObligationLiquidityBorrow");
+                Self::obligation_liquidity_borrow(program_id, amount, accounts)
+            }
+
+            LendingInstruction::ObligationLiquidityRepay { amount } => {
+                msg!("LendingInstruction: ObligationLiquidityRepay");
+                Self::obligation_liquidity_repay(program_id, amount, accounts)
             }
         }
     }
