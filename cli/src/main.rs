@@ -1,11 +1,16 @@
 use clap::{
     crate_description, crate_name, crate_version, value_t, App, AppSettings, Arg, SubCommand,
 };
-use everlend_lending::{find_program_address, instruction, state::Market};
+use everlend_lending::{
+    find_program_address, instruction,
+    state::{ui_ratio_to_ratio, Market},
+};
 use solana_clap_utils::{
     fee_payer::fee_payer_arg,
-    input_parsers::{keypair_of, pubkey_of},
-    input_validators::{is_keypair, is_keypair_or_ask_keyword, is_pubkey, is_url_or_moniker},
+    input_parsers::{keypair_of, pubkey_of, value_of},
+    input_validators::{
+        is_amount, is_keypair, is_keypair_or_ask_keyword, is_pubkey, is_url_or_moniker,
+    },
     keypair::signer_from_path,
 };
 use solana_client::rpc_client::RpcClient;
@@ -180,6 +185,83 @@ fn command_create_liquidity_token(
     Ok(Some(tx))
 }
 
+fn command_create_collateral_token(
+    config: &Config,
+    market_pubkey: &Pubkey,
+    token_mint: &Pubkey,
+    ui_ratio_initial: f64,
+    ui_ratio_healthy: f64,
+) -> CommandResult {
+    let market_account = config.rpc_client.get_account(&market_pubkey)?;
+    let market = Market::unpack(&market_account.data)?;
+
+    // Generate new accounts
+    let token_account = Keypair::new();
+    let ratio_initial = ui_ratio_to_ratio(ui_ratio_initial);
+    let ratio_healthy = ui_ratio_to_ratio(ui_ratio_healthy);
+
+    // Calculate collateral pubkey
+    let seed = format!("collateral{:?}", market.collateral_tokens);
+    let (market_authority, _) = find_program_address(&everlend_lending::id(), market_pubkey);
+    let collateral_pubkey =
+        Pubkey::create_with_seed(&market_authority, &seed, &everlend_lending::id())?;
+
+    println!("Collateral: {}", &collateral_pubkey);
+    println!(
+        "Ratio initial: {}, ratio healthy: {}",
+        ui_ratio_initial, ui_ratio_healthy
+    );
+    println!("Token mint: {}", &token_mint);
+    println!("Token account: {}", &token_account.pubkey());
+    println!("Market: {}", &market_pubkey);
+
+    let token_account_balance = config
+        .rpc_client
+        .get_minimum_balance_for_rent_exemption(spl_token::state::Account::LEN)?;
+
+    let total_rent_free_balances = token_account_balance;
+
+    let mut tx = Transaction::new_with_payer(
+        &[
+            system_instruction::create_account(
+                &config.fee_payer.pubkey(),
+                &token_account.pubkey(),
+                token_account_balance,
+                spl_token::state::Account::LEN as u64,
+                &spl_token::id(),
+            ),
+            instruction::create_collateral_token(
+                &everlend_lending::id(),
+                ratio_initial,
+                ratio_healthy,
+                &collateral_pubkey,
+                &token_mint,
+                &token_account.pubkey(),
+                &market_pubkey,
+                &config.owner.pubkey(),
+            )?,
+        ],
+        Some(&config.fee_payer.pubkey()),
+    );
+
+    let (recent_blockhash, fee_calculator) = config.rpc_client.get_recent_blockhash()?;
+    check_fee_payer_balance(
+        config,
+        total_rent_free_balances + fee_calculator.calculate_fee(&tx.message()),
+    )?;
+
+    let mut signers = vec![
+        config.fee_payer.as_ref(),
+        config.owner.as_ref(),
+        &token_account,
+    ];
+
+    unique_signers!(signers);
+    tx.sign(&signers, recent_blockhash);
+
+    Ok(Some(tx))
+}
+
 fn main() {
     let matches = App::new(crate_name!())
         .about(crate_description!())
@@ -269,6 +351,46 @@ fn main() {
                         .help("Mint for the token to be added as liquidity"),
                 ),
         )
+        .subcommand(
+            SubCommand::with_name("create-collateral-token")
+                .about("Add a collateral token")
+                .arg(
+                    Arg::with_name("market_pubkey")
+                        .long("market")
+                        .validator(is_pubkey)
+                        .value_name("ADDRESS")
+                        .takes_value(true)
+                        .required(true)
+                        .help("Market pubkey"),
+                )
+                .arg(
+                    Arg::with_name("token_mint")
+                        .long("token")
+                        .validator(is_pubkey)
+                        .value_name("ADDRESS")
+                        .takes_value(true)
+                        .required(true)
+                        .help("Mint for the token to be added as liquidity"),
+                )
+                .arg(
+                    Arg::with_name("ratio_initial")
+                        .long("ratio-initial")
+                        .validator(is_amount)
+                        .value_name("RATIO")
+                        .takes_value(true)
+                        .default_value("0.5")
+                        .help("Ratio initial"),
+                )
+                .arg(
+                    Arg::with_name("ratio_healthy")
+                        .long("ratio-healthy")
+                        .validator(is_amount)
+                        .value_name("RATIO")
+                        .takes_value(true)
+                        .default_value("0.75")
+                        .help("Ratio healthy"),
+                ),
+        )
         .get_matches();
 
     let mut wallet_manager = None;
@@ -324,7 +446,20 @@ fn main() {
         ("create-liquidity-token", Some(arg_matches)) => {
             let market_pubkey = pubkey_of(arg_matches, "market_pubkey").unwrap();
             let token_mint = pubkey_of(arg_matches, "token_mint").unwrap();
-            command_create_liquidity_token(&config, &&market_pubkey, &token_mint)
+            command_create_liquidity_token(&config, &market_pubkey, &token_mint)
+        }
+        ("create-collateral-token", Some(arg_matches)) => {
+            let market_pubkey = pubkey_of(arg_matches, "market_pubkey").unwrap();
+            let token_mint = pubkey_of(arg_matches, "token_mint").unwrap();
+            let ratio_initial = value_of::<f64>(arg_matches, "ratio_initial").unwrap();
+            let ratio_healthy = value_of::<f64>(arg_matches, "ratio_healthy").unwrap();
+            command_create_collateral_token(
+                &config,
+                &market_pubkey,
+                &token_mint,
+                ratio_initial,
+                ratio_healthy,
+            )
         }
         _ => unreachable!(),
     }
