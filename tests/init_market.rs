@@ -15,7 +15,7 @@ use utils::*;
 async fn success() {
     let mut context = program_test().start_with_context().await;
 
-    let market_info = market::MarketInfo::new();
+    let market_info = MarketInfo::new();
     market_info.init(&mut context).await.unwrap();
 
     let market = market_info.get_data(&mut context).await;
@@ -28,7 +28,7 @@ async fn success() {
 async fn fail_already_initialized() {
     let mut context = program_test().start_with_context().await;
 
-    let market_info = market::MarketInfo::new();
+    let market_info = MarketInfo::new();
     market_info.init(&mut context).await.unwrap();
 
     let tx = Transaction::new_signed_with_payer(

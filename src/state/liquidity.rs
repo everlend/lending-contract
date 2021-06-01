@@ -1,4 +1,8 @@
 //! Program state definitions
+
+use crate::error::LendingError;
+
+use super::*;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use solana_program::{
     msg,
@@ -6,8 +10,6 @@ use solana_program::{
     program_pack::{IsInitialized, Pack, Sealed},
     pubkey::Pubkey,
 };
-
-use super::*;
 
 /// Liqudiity status
 #[repr(C)]
@@ -54,6 +56,46 @@ impl Liquidity {
         self.token_mint = params.token_mint;
         self.token_account = params.token_account;
         self.pool_mint = params.pool_mint;
+    }
+
+    /// Deposit exchange amount
+    pub fn calc_deposit_exchange_amount(
+        &self,
+        amount: u64,
+        token_account_amount: u64,
+        pool_mint_supply: u64,
+    ) -> Result<u64, ProgramError> {
+        let result = if pool_mint_supply == 0 || token_account_amount == 0 {
+            amount
+        } else {
+            amount
+                .checked_mul(pool_mint_supply)
+                .ok_or(LendingError::CalculationFailure)?
+                .checked_div(token_account_amount)
+                .ok_or(LendingError::CalculationFailure)?
+        };
+
+        Ok(result)
+    }
+
+    /// Withdraw exchange amount
+    pub fn calc_withdraw_exchange_amount(
+        &self,
+        amount: u64,
+        token_account_amount: u64,
+        pool_mint_supply: u64,
+    ) -> Result<u64, ProgramError> {
+        let result = if pool_mint_supply == 0 || token_account_amount == 0 {
+            amount
+        } else {
+            amount
+                .checked_mul(token_account_amount)
+                .ok_or(LendingError::CalculationFailure)?
+                .checked_div(pool_mint_supply)
+                .ok_or(LendingError::CalculationFailure)?
+        };
+
+        Ok(result)
     }
 }
 

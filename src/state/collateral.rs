@@ -1,4 +1,5 @@
 //! Program state definitions
+use super::*;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use solana_program::{
     msg,
@@ -6,8 +7,6 @@ use solana_program::{
     program_pack::{IsInitialized, Pack, Sealed},
     pubkey::Pubkey,
 };
-
-use super::*;
 
 /// Collateral status
 #[repr(C)]

@@ -1,11 +1,13 @@
-use super::get_account;
-use everlend_lending::state::{Collateral, CollateralStatus};
-use everlend_lending::{id, instruction};
+use super::{get_account, market::MarketInfo};
+use everlend_lending::{
+    find_program_address, id, instruction,
+    state::{Collateral, CollateralStatus},
+};
 use solana_program::{program_pack::Pack, pubkey::Pubkey, system_instruction};
 use solana_program_test::ProgramTestContext;
-use solana_sdk::transaction::Transaction;
 use solana_sdk::{
     signature::{Keypair, Signer},
+    transaction::Transaction,
     transport,
 };
 
@@ -20,9 +22,12 @@ pub struct CollateralInfo {
 }
 
 impl CollateralInfo {
-    pub fn new(base: &Pubkey, seed: &str) -> Self {
+    pub fn new(seed: &str, market_info: &MarketInfo) -> Self {
+        let (market_authority, _) =
+            find_program_address(&everlend_lending::id(), &market_info.market.pubkey());
+
         Self {
-            collateral_pubkey: Pubkey::create_with_seed(base, seed, &id()).unwrap(),
+            collateral_pubkey: Pubkey::create_with_seed(&market_authority, seed, &id()).unwrap(),
             token_mint: Keypair::new(),
             token_account: Keypair::new(),
         }
@@ -36,8 +41,7 @@ impl CollateralInfo {
     pub async fn create(
         &self,
         context: &mut ProgramTestContext,
-        market_pubkey: &Pubkey,
-        market_owner: &Keypair,
+        market_info: &MarketInfo,
     ) -> transport::Result<()> {
         let rent = context.banks_client.get_rent().await.unwrap();
 
@@ -46,7 +50,7 @@ impl CollateralInfo {
                 // Transfer a few lamports to cover fee for create account
                 system_instruction::transfer(
                     &context.payer.pubkey(),
-                    &market_owner.pubkey(),
+                    &market_info.owner.pubkey(),
                     999999999,
                 ),
                 system_instruction::create_account(
@@ -63,13 +67,13 @@ impl CollateralInfo {
                     &self.collateral_pubkey,
                     &self.token_mint.pubkey(),
                     &self.token_account.pubkey(),
-                    &market_pubkey,
-                    &market_owner.pubkey(),
+                    &market_info.market.pubkey(),
+                    &market_info.owner.pubkey(),
                 )
                 .unwrap(),
             ],
             Some(&context.payer.pubkey()),
-            &[&context.payer, &self.token_account, &market_owner],
+            &[&context.payer, &self.token_account, &market_info.owner],
             context.last_blockhash,
         );
 
@@ -82,7 +86,7 @@ impl CollateralInfo {
         status: CollateralStatus,
         ratio_initial: u64,
         ratio_healthy: u64,
-        market_owner: &Keypair,
+        market_info: &MarketInfo,
     ) -> transport::Result<()> {
         let tx = Transaction::new_signed_with_payer(
             &[instruction::update_collateral_token(
@@ -91,11 +95,12 @@ impl CollateralInfo {
                 ratio_initial,
                 ratio_healthy,
                 &self.collateral_pubkey,
-                &market_owner.pubkey(),
+                &market_info.market.pubkey(),
+                &market_info.owner.pubkey(),
             )
             .unwrap()],
             Some(&context.payer.pubkey()),
-            &[&context.payer, &market_owner],
+            &[&context.payer, &market_info.owner],
             context.last_blockhash,
         );
 

@@ -1,11 +1,13 @@
-use super::get_account;
-use everlend_lending::state::{Liquidity, LiquidityStatus};
-use everlend_lending::{id, instruction};
+use super::{get_account, market::MarketInfo};
+use everlend_lending::{
+    find_program_address, id, instruction,
+    state::{Liquidity, LiquidityStatus},
+};
 use solana_program::{program_pack::Pack, pubkey::Pubkey, system_instruction};
 use solana_program_test::ProgramTestContext;
-use solana_sdk::transaction::Transaction;
 use solana_sdk::{
     signature::{Keypair, Signer},
+    transaction::Transaction,
     transport,
 };
 
@@ -18,9 +20,12 @@ pub struct LiquidityInfo {
 }
 
 impl LiquidityInfo {
-    pub fn new(base: &Pubkey, seed: &str) -> Self {
+    pub fn new(seed: &str, market_info: &MarketInfo) -> Self {
+        let (market_authority, _) =
+            find_program_address(&everlend_lending::id(), &market_info.market.pubkey());
+
         Self {
-            liquidity_pubkey: Pubkey::create_with_seed(base, seed, &id()).unwrap(),
+            liquidity_pubkey: Pubkey::create_with_seed(&market_authority, seed, &id()).unwrap(),
             token_mint: Keypair::new(),
             token_account: Keypair::new(),
             pool_mint: Keypair::new(),
@@ -35,8 +40,7 @@ impl LiquidityInfo {
     pub async fn create(
         &self,
         context: &mut ProgramTestContext,
-        market_pubkey: &Pubkey,
-        market_owner: &Keypair,
+        market_info: &MarketInfo,
     ) -> transport::Result<()> {
         let rent = context.banks_client.get_rent().await.unwrap();
 
@@ -45,7 +49,7 @@ impl LiquidityInfo {
                 // Transfer a few lamports to cover fee for create account
                 system_instruction::transfer(
                     &context.payer.pubkey(),
-                    &market_owner.pubkey(),
+                    &market_info.owner.pubkey(),
                     999999999,
                 ),
                 system_instruction::create_account(
@@ -68,8 +72,8 @@ impl LiquidityInfo {
                     &self.token_mint.pubkey(),
                     &self.token_account.pubkey(),
                     &self.pool_mint.pubkey(),
-                    &market_pubkey,
-                    &market_owner.pubkey(),
+                    &market_info.market.pubkey(),
+                    &market_info.owner.pubkey(),
                 )
                 .unwrap(),
             ],
@@ -78,7 +82,7 @@ impl LiquidityInfo {
                 &context.payer,
                 &self.token_account,
                 &self.pool_mint,
-                &market_owner,
+                &market_info.owner,
             ],
             context.last_blockhash,
         );
@@ -90,18 +94,79 @@ impl LiquidityInfo {
         &self,
         context: &mut ProgramTestContext,
         status: LiquidityStatus,
-        market_owner: &Keypair,
+        market_info: &MarketInfo,
     ) -> transport::Result<()> {
         let tx = Transaction::new_signed_with_payer(
             &[instruction::update_liquidity_token(
                 &id(),
                 status,
                 &self.liquidity_pubkey,
-                &market_owner.pubkey(),
+                &market_info.market.pubkey(),
+                &market_info.owner.pubkey(),
             )
             .unwrap()],
             Some(&context.payer.pubkey()),
-            &[&context.payer, &market_owner],
+            &[&context.payer, &market_info.owner],
+            context.last_blockhash,
+        );
+
+        context.banks_client.process_transaction(tx).await
+    }
+
+    pub async fn deposit(
+        &self,
+        context: &mut ProgramTestContext,
+        market_info: &MarketInfo,
+        source: &Pubkey,
+        destination: &Pubkey,
+        amount: u64,
+        provider: &Keypair,
+    ) -> transport::Result<()> {
+        let tx = Transaction::new_signed_with_payer(
+            &[instruction::liquidity_deposit(
+                &id(),
+                amount,
+                &self.liquidity_pubkey,
+                source,
+                destination,
+                &self.token_account.pubkey(),
+                &self.pool_mint.pubkey(),
+                &market_info.market.pubkey(),
+                &provider.pubkey(),
+            )
+            .unwrap()],
+            Some(&context.payer.pubkey()),
+            &[&context.payer, &provider],
+            context.last_blockhash,
+        );
+
+        context.banks_client.process_transaction(tx).await
+    }
+
+    pub async fn withdraw(
+        &self,
+        context: &mut ProgramTestContext,
+        market_info: &MarketInfo,
+        source: &Pubkey,
+        destination: &Pubkey,
+        amount: u64,
+        provider: &Keypair,
+    ) -> transport::Result<()> {
+        let tx = Transaction::new_signed_with_payer(
+            &[instruction::liquidity_withdraw(
+                &id(),
+                amount,
+                &self.liquidity_pubkey,
+                source,
+                destination,
+                &self.token_account.pubkey(),
+                &self.pool_mint.pubkey(),
+                &market_info.market.pubkey(),
+                &provider.pubkey(),
+            )
+            .unwrap()],
+            Some(&context.payer.pubkey()),
+            &[&context.payer, &provider],
             context.last_blockhash,
         );
 
