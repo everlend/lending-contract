@@ -25,7 +25,7 @@ pub fn ui_ratio_to_ratio(ui_ratio: f64) -> u64 {
     (ui_ratio * RATIO_POWER as f64) as u64
 }
 
-/// Convert the raw ratio (like 0.5) to the UI representation
+/// Convert the raw ratio (like 500_000_000) to the UI representation
 pub fn ratio_to_ui_ratio(ratio: u64) -> f64 {
     ratio as f64 / RATIO_POWER as f64
 }
