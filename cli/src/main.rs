@@ -4,7 +4,7 @@ use clap::{
 };
 use everlend_lending::{
     find_program_address, instruction,
-    state::{ui_ratio_to_ratio, Liquidity, LiquidityStatus, Market},
+    state::{ui_ratio_to_ratio, Collateral, CollateralStatus, Liquidity, LiquidityStatus, Market},
 };
 use solana_clap_utils::{
     fee_payer::fee_payer_arg,
@@ -37,19 +37,29 @@ type CommandResult = Result<Option<Transaction>, Error>;
 
 arg_enum! {
     #[derive(Debug)]
-    pub enum ArgLiquidityStatus {
+    pub enum ArgTokenStatus {
         InActive = 0,
         Active = 1,
         InActiveAndVisible = 2,
     }
 }
 
-impl From<ArgLiquidityStatus> for LiquidityStatus {
-    fn from(other: ArgLiquidityStatus) -> LiquidityStatus {
+impl From<ArgTokenStatus> for LiquidityStatus {
+    fn from(other: ArgTokenStatus) -> LiquidityStatus {
         match other {
-            ArgLiquidityStatus::InActive => LiquidityStatus::InActive,
-            ArgLiquidityStatus::Active => LiquidityStatus::Active,
-            ArgLiquidityStatus::InActiveAndVisible => LiquidityStatus::InActiveAndVisible,
+            ArgTokenStatus::InActive => LiquidityStatus::InActive,
+            ArgTokenStatus::Active => LiquidityStatus::Active,
+            ArgTokenStatus::InActiveAndVisible => LiquidityStatus::InActiveAndVisible,
+        }
+    }
+}
+
+impl From<ArgTokenStatus> for CollateralStatus {
+    fn from(other: ArgTokenStatus) -> CollateralStatus {
+        match other {
+            ArgTokenStatus::InActive => CollateralStatus::InActive,
+            ArgTokenStatus::Active => CollateralStatus::Active,
+            ArgTokenStatus::InActiveAndVisible => CollateralStatus::InActiveAndVisible,
         }
     }
 }
@@ -325,6 +335,68 @@ fn command_update_liquidity_token(
     Ok(Some(tx))
 }
 
+fn command_update_collateral_token(
+    config: &Config,
+    collateral_pubkey: Option<Pubkey>,
+    market_pubkey: Option<Pubkey>,
+    collateral_index: Option<u64>,
+    status: CollateralStatus,
+    ui_ratio_initial: Option<f64>,
+    ui_ratio_healthy: Option<f64>,
+) -> CommandResult {
+    let collateral_pubkey = collateral_pubkey.unwrap_or_else(|| {
+        let seed = format!("collateral{:?}", collateral_index.unwrap());
+        let (market_authority, _) =
+            find_program_address(&everlend_lending::id(), &market_pubkey.unwrap());
+
+        Pubkey::create_with_seed(&market_authority, &seed, &everlend_lending::id()).unwrap()
+    });
+
+    let collateral_account = config.rpc_client.get_account(&collateral_pubkey)?;
+    let collateral = Collateral::unpack(&collateral_account.data)?;
+
+    println!("Liquidity: {}", &collateral_pubkey);
+    println!("New status: {:?}", status);
+
+    let ratio_initial = match ui_ratio_initial {
+        Some(ui_ratio_initial) => {
+            println!("New ratio initial: {:?}", ui_ratio_initial);
+            ui_ratio_to_ratio(ui_ratio_initial)
+        }
+        _ => collateral.ratio_initial,
+    };
+    let ratio_healthy = match ui_ratio_healthy {
+        Some(ui_ratio_healthy) => {
+            println!("New ration healthy: {:?}", ui_ratio_healthy);
+            ui_ratio_to_ratio(ui_ratio_healthy)
+        }
+        _ => collateral.ratio_healthy,
+    };
+
+    let mut tx = Transaction::new_with_payer(
+        &[instruction::update_collateral_token(
+            &everlend_lending::id(),
+            status,
+            ratio_initial,
+            ratio_healthy,
+            &collateral_pubkey,
+            &collateral.market,
+            &config.owner.pubkey(),
+        )?],
+        Some(&config.fee_payer.pubkey()),
+    );
+
+    let (recent_blockhash, fee_calculator) = config.rpc_client.get_recent_blockhash()?;
+    check_fee_payer_balance(config, fee_calculator.calculate_fee(&tx.message()))?;
+
+    let mut signers = vec![config.fee_payer.as_ref(), config.owner.as_ref()];
+
+    unique_signers!(signers);
+    tx.sign(&signers, recent_blockhash);
+
+    Ok(Some(tx))
+}
+
 fn main() {
     let matches = App::new(crate_name!())
         .about(crate_description!())
@@ -489,9 +561,65 @@ fn main() {
                         .value_name("NEW_STATUS")
                         .takes_value(true)
                         .required(true)
-                        .possible_values(&ArgLiquidityStatus::variants())
+                        .possible_values(&ArgTokenStatus::variants())
                         .index(1)
                         .help("New liquidity status."),
+                ),
+        )
+        .subcommand(
+            SubCommand::with_name("update-collateral-token")
+                .about("Update a collateral token")
+                .arg(
+                    Arg::with_name("collateral_pubkey")
+                        .long("pubkey")
+                        .validator(is_pubkey)
+                        .value_name("ADDRESS")
+                        .takes_value(true)
+                        .required_unless_all(&["market_pubkey", "collateral_index"])
+                        .help("Liquidity pubkey"),
+                )
+                .arg(
+                    Arg::with_name("market_pubkey")
+                        .long("market")
+                        .validator(is_pubkey)
+                        .value_name("ADDRESS")
+                        .takes_value(true)
+                        .required_unless("collateral_pubkey")
+                        .help("Market pubkey"),
+                )
+                .arg(
+                    Arg::with_name("collateral_index")
+                        .long("index")
+                        .value_name("NUMBER")
+                        .takes_value(true)
+                        .required_unless("collateral_pubkey")
+                        .requires("market_pubkey")
+                        .help("Liquidity index"),
+                )
+                .arg(
+                    Arg::with_name("status")
+                        .value_name("NEW_STATUS")
+                        .takes_value(true)
+                        .required(true)
+                        .possible_values(&ArgTokenStatus::variants())
+                        .index(1)
+                        .help("New collateral status."),
+                )
+                .arg(
+                    Arg::with_name("ratio_initial")
+                        .long("ratio-initial")
+                        .validator(is_amount)
+                        .value_name("RATIO")
+                        .takes_value(true)
+                        .help("Ratio initial"),
+                )
+                .arg(
+                    Arg::with_name("ratio_healthy")
+                        .long("ratio-healthy")
+                        .validator(is_amount)
+                        .value_name("RATIO")
+                        .takes_value(true)
+                        .help("Ratio healthy"),
                 ),
         )
         .get_matches();
@@ -568,13 +696,30 @@ fn main() {
             let liquidity_pubkey = pubkey_of(arg_matches, "liquidity_pubkey");
             let market_pubkey = pubkey_of(arg_matches, "market_pubkey");
             let liquidity_index = value_of::<u64>(arg_matches, "liquidity_index");
-            let status = value_t!(arg_matches, "status", ArgLiquidityStatus).unwrap();
+            let status = value_t!(arg_matches, "status", ArgTokenStatus).unwrap();
             command_update_liquidity_token(
                 &config,
                 liquidity_pubkey,
                 market_pubkey,
                 liquidity_index,
                 LiquidityStatus::from(status),
+            )
+        }
+        ("update-collateral-token", Some(arg_matches)) => {
+            let collateral_pubkey = pubkey_of(arg_matches, "collateral_pubkey");
+            let market_pubkey = pubkey_of(arg_matches, "market_pubkey");
+            let collateral_index = value_of::<u64>(arg_matches, "collateral_index");
+            let status = value_t!(arg_matches, "status", ArgTokenStatus).unwrap();
+            let ratio_initial = value_of::<f64>(arg_matches, "ratio_initial");
+            let ratio_healthy = value_of::<f64>(arg_matches, "ratio_healthy");
+            command_update_collateral_token(
+                &config,
+                collateral_pubkey,
+                market_pubkey,
+                collateral_index,
+                CollateralStatus::from(status),
+                ratio_initial,
+                ratio_healthy,
             )
         }
         _ => unreachable!(),
