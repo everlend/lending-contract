@@ -1,9 +1,10 @@
 use clap::{
-    crate_description, crate_name, crate_version, value_t, App, AppSettings, Arg, SubCommand,
+    arg_enum, crate_description, crate_name, crate_version, value_t, App, AppSettings, Arg,
+    SubCommand,
 };
 use everlend_lending::{
     find_program_address, instruction,
-    state::{ui_ratio_to_ratio, Market},
+    state::{ui_ratio_to_ratio, Liquidity, LiquidityStatus, Market},
 };
 use solana_clap_utils::{
     fee_payer::fee_payer_arg,
@@ -33,6 +34,25 @@ struct Config {
 
 type Error = Box<dyn std::error::Error>;
 type CommandResult = Result<Option<Transaction>, Error>;
+
+arg_enum! {
+    #[derive(Debug)]
+    pub enum ArgLiquidityStatus {
+        InActive = 0,
+        Active = 1,
+        InActiveAndVisible = 2,
+    }
+}
+
+impl From<ArgLiquidityStatus> for LiquidityStatus {
+    fn from(other: ArgLiquidityStatus) -> LiquidityStatus {
+        match other {
+            ArgLiquidityStatus::InActive => LiquidityStatus::InActive,
+            ArgLiquidityStatus::Active => LiquidityStatus::Active,
+            ArgLiquidityStatus::InActiveAndVisible => LiquidityStatus::InActiveAndVisible,
+        }
+    }
+}
 
 macro_rules! unique_signers {
     ($vec:ident) => {
@@ -262,6 +282,49 @@ fn command_create_collateral_token(
     Ok(Some(tx))
 }
 
+fn command_update_liquidity_token(
+    config: &Config,
+    liquidity_pubkey: Option<Pubkey>,
+    market_pubkey: Option<Pubkey>,
+    liquidity_index: Option<u64>,
+    status: LiquidityStatus,
+) -> CommandResult {
+    let liquidity_pubkey = liquidity_pubkey.unwrap_or_else(|| {
+        let seed = format!("liquidity{:?}", liquidity_index.unwrap());
+        let (market_authority, _) =
+            find_program_address(&everlend_lending::id(), &market_pubkey.unwrap());
+
+        Pubkey::create_with_seed(&market_authority, &seed, &everlend_lending::id()).unwrap()
+    });
+
+    let liquidity_account = config.rpc_client.get_account(&liquidity_pubkey)?;
+    let liquidity = Liquidity::unpack(&liquidity_account.data)?;
+
+    println!("Liquidity: {}", &liquidity_pubkey);
+    println!("New status: {:?}", status);
+
+    let mut tx = Transaction::new_with_payer(
+        &[instruction::update_liquidity_token(
+            &everlend_lending::id(),
+            status,
+            &liquidity_pubkey,
+            &liquidity.market,
+            &config.owner.pubkey(),
+        )?],
+        Some(&config.fee_payer.pubkey()),
+    );
+
+    let (recent_blockhash, fee_calculator) = config.rpc_client.get_recent_blockhash()?;
+    check_fee_payer_balance(config, fee_calculator.calculate_fee(&tx.message()))?;
+
+    let mut signers = vec![config.fee_payer.as_ref(), config.owner.as_ref()];
+
+    unique_signers!(signers);
+    tx.sign(&signers, recent_blockhash);
+
+    Ok(Some(tx))
+}
+
 fn main() {
     let matches = App::new(crate_name!())
         .about(crate_description!())
@@ -391,6 +454,46 @@ fn main() {
                         .help("Ratio healthy"),
                 ),
         )
+        .subcommand(
+            SubCommand::with_name("update-liquidity-token")
+                .about("Update a liquidity token")
+                .arg(
+                    Arg::with_name("liquidity_pubkey")
+                        .long("pubkey")
+                        .validator(is_pubkey)
+                        .value_name("ADDRESS")
+                        .takes_value(true)
+                        .required_unless_all(&["market_pubkey", "liquidity_index"])
+                        .help("Liquidity pubkey"),
+                )
+                .arg(
+                    Arg::with_name("market_pubkey")
+                        .long("market")
+                        .validator(is_pubkey)
+                        .value_name("ADDRESS")
+                        .takes_value(true)
+                        .required_unless("liquidity_pubkey")
+                        .help("Market pubkey"),
+                )
+                .arg(
+                    Arg::with_name("liquidity_index")
+                        .long("index")
+                        .value_name("NUMBER")
+                        .takes_value(true)
+                        .required_unless("liquidity_pubkey")
+                        .requires("market_pubkey")
+                        .help("Liquidity index"),
+                )
+                .arg(
+                    Arg::with_name("status")
+                        .value_name("NEW_STATUS")
+                        .takes_value(true)
+                        .required(true)
+                        .possible_values(&ArgLiquidityStatus::variants())
+                        .index(1)
+                        .help("New liquidity status."),
+                ),
+        )
         .get_matches();
 
     let mut wallet_manager = None;
@@ -459,6 +562,19 @@ fn main() {
                 &token_mint,
                 ratio_initial,
                 ratio_healthy,
+            )
+        }
+        ("update-liquidity-token", Some(arg_matches)) => {
+            let liquidity_pubkey = pubkey_of(arg_matches, "liquidity_pubkey");
+            let market_pubkey = pubkey_of(arg_matches, "market_pubkey");
+            let liquidity_index = value_of::<u64>(arg_matches, "liquidity_index");
+            let status = value_t!(arg_matches, "status", ArgLiquidityStatus).unwrap();
+            command_update_liquidity_token(
+                &config,
+                liquidity_pubkey,
+                market_pubkey,
+                liquidity_index,
+                LiquidityStatus::from(status),
             )
         }
         _ => unreachable!(),
