@@ -134,6 +134,42 @@ fn command_create_market(config: &Config, market_keypair: Option<Keypair>) -> Co
     Ok(Some(tx))
 }
 
+fn command_market_info(config: &Config, market_pubkey: &Pubkey) -> CommandResult {
+    let market_account = config.rpc_client.get_account(&market_pubkey)?;
+    let market = Market::unpack(&market_account.data)?;
+    let (market_authority, _) = find_program_address(&everlend_lending::id(), market_pubkey);
+
+    println!("{:#?}", market);
+
+    println!("Liquidity tokens:");
+    for index in 0..market.liquidity_tokens {
+        let liquidity_pubkey = Pubkey::create_with_seed(
+            &market_authority,
+            &format!("liquidity{:?}", index),
+            &everlend_lending::id(),
+        )?;
+        let liquidity_account = config.rpc_client.get_account(&liquidity_pubkey)?;
+        let liquidity = Liquidity::unpack(&liquidity_account.data)?;
+
+        println!("{:#?}", liquidity);
+    }
+
+    println!("Collateral tokens:");
+    for index in 0..market.collateral_tokens {
+        let collateral_pubkey = Pubkey::create_with_seed(
+            &market_authority,
+            &format!("collateral{:?}", index),
+            &everlend_lending::id(),
+        )?;
+        let collateral_account = config.rpc_client.get_account(&collateral_pubkey)?;
+        let collateral = Collateral::unpack(&collateral_account.data)?;
+
+        println!("{:#?}", collateral);
+    }
+
+    Ok(None)
+}
+
 fn command_create_liquidity_token(
     config: &Config,
     market_pubkey: &Pubkey,
@@ -465,6 +501,19 @@ fn main() {
                 ),
         )
         .subcommand(
+            SubCommand::with_name("market-info")
+                .about("Print out market information and tokens")
+                .arg(
+                    Arg::with_name("market_pubkey")
+                        .validator(is_pubkey)
+                        .value_name("ADDRESS")
+                        .takes_value(true)
+                        .required(true)
+                        .index(1)
+                        .help("Market pubkey"),
+                ),
+        )
+        .subcommand(
             SubCommand::with_name("create-liquidity-token")
                 .about("Add a liquidity token")
                 .arg(
@@ -673,6 +722,10 @@ fn main() {
         ("create-market", Some(arg_matches)) => {
             let market_keypair = keypair_of(arg_matches, "market_keypair");
             command_create_market(&config, market_keypair)
+        }
+        ("market-info", Some(arg_matches)) => {
+            let market_pubkey = pubkey_of(arg_matches, "market_pubkey").unwrap();
+            command_market_info(&config, &market_pubkey)
         }
         ("create-liquidity-token", Some(arg_matches)) => {
             let market_pubkey = pubkey_of(arg_matches, "market_pubkey").unwrap();
