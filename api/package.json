@@ -1,11 +1,13 @@
 {
   "name": "@everlend/api",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "MIT",
   "main": "dist/index.js",
+  "module": "esm/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "rimraf dist && tsc --project ./tsconfig.build.json",
+    "build": "rimraf dist && tsc -p ./tsconfig.build.json",
+    "build:esm": "rimraf esm && tsc -p ./tsconfig.esm.json",
     "clean": "yarn cache clean && rm -rf node_modules",
     "test": "jest",
     "test:watch": "jest --watch"
