@@ -8,5 +8,5 @@
     "./src",
     "./test"
   ],
-  "exclude": ["node_modules", "dist", "esm"]
+  "exclude": ["node_modules", "dist"]
 }

@@ -1,13 +1,18 @@
 {
   "name": "@everlend/api",
-  "version": "0.1.1",
+  "version": "0.1.4",
   "license": "MIT",
   "main": "dist/index.js",
-  "module": "esm/index.js",
   "types": "dist/index.d.ts",
+  "repository": {
+    "url": "git@github.com:everlend/lending-contract.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/",
+    "access": "public"
+  },
   "scripts": {
     "build": "rimraf dist && tsc -p ./tsconfig.build.json",
-    "build:esm": "rimraf esm && tsc -p ./tsconfig.esm.json",
     "clean": "yarn cache clean && rm -rf node_modules",
     "test": "jest",
     "test:watch": "jest --watch"

@@ -1,9 +1,0 @@
-{
-  "extends": "./tsconfig.build.json",
-  "compilerOptions": {
-    "target": "es5",
-    "module": "es6",
-    "baseUrl": ".",
-    "outDir": "esm",
-  }
-}
