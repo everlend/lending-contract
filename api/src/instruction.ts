@@ -1,5 +1,10 @@
 import { TOKEN_PROGRAM_ID, u64 } from '@solana/spl-token'
-import { PublicKey, TransactionInstruction } from '@solana/web3.js'
+import {
+  PublicKey,
+  SystemProgram,
+  SYSVAR_RENT_PUBKEY,
+  TransactionInstruction,
+} from '@solana/web3.js'
 import { MarketInsructionLayouts } from './layout'
 import { encodeData } from './utils'
 
@@ -87,6 +92,41 @@ export const liquidityWithdraw = ({
       { pubkey: marketAuthority, isSigner: false, isWritable: false },
       { pubkey: userTransferAuthority, isSigner: true, isWritable: false },
       { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+    programId: new PublicKey(programId),
+    data,
+  })
+}
+
+export type CreateObligationParams = BaseInstructionParams & {
+  market: PublicKey
+  obligation: PublicKey
+  liquidity: PublicKey
+  collateral: PublicKey
+  obligationAuthority: PublicKey
+  owner: PublicKey
+}
+export const createObligation = ({
+  programId,
+  market,
+  obligation,
+  liquidity,
+  collateral,
+  obligationAuthority,
+  owner,
+}: CreateObligationParams) => {
+  const data = encodeData(MarketInsructionLayouts.CreateObligation)
+
+  return new TransactionInstruction({
+    keys: [
+      { pubkey: obligation, isSigner: false, isWritable: true },
+      { pubkey: liquidity, isSigner: false, isWritable: false },
+      { pubkey: collateral, isSigner: false, isWritable: false },
+      { pubkey: market, isSigner: false, isWritable: false },
+      { pubkey: obligationAuthority, isSigner: false, isWritable: false },
+      { pubkey: owner, isSigner: true, isWritable: false },
+      { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
     programId: new PublicKey(programId),
     data,

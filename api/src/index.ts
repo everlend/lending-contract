@@ -217,6 +217,44 @@ export class LendingMarket {
     console.log(`Signature: ${signature}`)
   }
 
+  async createObligation(
+    liquidityPubkey: PublicKey,
+    collateralPubkey: PublicKey,
+  ): Promise<PublicKey> {
+    const [obligationAuthority] = await PublicKey.findProgramAddress(
+      [
+        this.payer.publicKey.toBuffer(),
+        this.pubkey.toBuffer(),
+        liquidityPubkey.toBuffer(),
+        collateralPubkey.toBuffer(),
+      ],
+      this.programId,
+    )
+
+    const obligationPubkey = await PublicKey.createWithSeed(
+      obligationAuthority,
+      'obligation',
+      this.programId,
+    )
+
+    const tx = new Transaction().add(
+      Instruction.createObligation({
+        programId: this.programId,
+        market: this.pubkey,
+        obligation: obligationPubkey,
+        liquidity: liquidityPubkey,
+        collateral: collateralPubkey,
+        obligationAuthority,
+        owner: this.payer.publicKey,
+      }),
+    )
+
+    const signature = await sendAndConfirmTransaction(this.connection, tx, [this.payer])
+    console.log(`Signature: ${signature}`)
+
+    return obligationPubkey
+  }
+
   async getTokenDecimals(pubkey: PublicKey) {
     const token = new Token(this.connection, pubkey, TOKEN_PROGRAM_ID, this.payer)
     const tokenInfo = await token.getMintInfo()

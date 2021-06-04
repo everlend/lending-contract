@@ -115,4 +115,16 @@ describe('LendingMarket', () => {
       expect(balanceAfter.cmp(balanceBefore.sub(amount))).toEqual(0)
     })
   })
+
+  describe('createObligation', () => {
+    test('create obligation', async () => {
+      const obligationPubkey = await lendingMarket.createObligation(
+        LIQUIDITY_PUBKEY,
+        COLLATERAL_PUBKEY,
+      )
+
+      const obligationAccount = await connection.getAccountInfo(obligationPubkey)
+      expect(obligationAccount.owner).toBe(payer.publicKey)
+    })
+  })
 })
