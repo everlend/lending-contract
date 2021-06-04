@@ -91,7 +91,7 @@ describe('LendingMarket', () => {
       await tokenMint.mintTo(source, payer, [], 999999999999)
 
       const balanceBefore = (await tokenMint.getAccountInfo(liquidity.tokenAccount)).amount
-      await lendingMarket.liquidityDeposit(LIQUIDITY_PUBKEY, uiAmount, source, destination, payer)
+      await lendingMarket.liquidityDeposit(LIQUIDITY_PUBKEY, uiAmount, source, destination)
 
       const balanceAfter = (await tokenMint.getAccountInfo(liquidity.tokenAccount)).amount
       expect(balanceAfter.cmp(balanceBefore.add(amount))).toEqual(0)

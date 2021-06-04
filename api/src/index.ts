@@ -117,7 +117,6 @@ export class LendingMarket {
     uiAmount: number,
     source: PublicKey,
     destination: PublicKey,
-    payer: Keypair,
   ) {
     const liquidity = await this.getLiquidityInfo(liquidityPubkey)
 
@@ -140,12 +139,12 @@ export class LendingMarket {
         tokenAccount: liquidity.tokenAccount,
         poolMint: liquidity.poolMint,
         marketAuthority,
-        userTransferAuthority: payer.publicKey,
+        userTransferAuthority: this.payer.publicKey,
         amount,
       }),
     )
 
-    const signature = await sendAndConfirmTransaction(this.connection, tx, [payer])
+    const signature = await sendAndConfirmTransaction(this.connection, tx, [this.payer])
     console.log(`Signature: ${signature}`)
   }
 }
