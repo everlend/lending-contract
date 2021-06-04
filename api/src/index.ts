@@ -30,7 +30,7 @@ export class LendingMarket {
       throw new Error(`Invalid market size`)
     }
 
-    const market = Market.from(info.data)
+    const market = { ...Market.from(info.data), pubkey: this.pubkey }
     return market
   }
 
@@ -76,7 +76,7 @@ export class LendingMarket {
       throw new Error(`Invalid liquidity size`)
     }
 
-    const liquidity = Liquidity.from(info.data)
+    const liquidity = { ...Liquidity.from(info.data), pubkey: liquidityPubkey }
     return liquidity
   }
 
@@ -86,7 +86,7 @@ export class LendingMarket {
       throw new Error(`Invalid collateral size`)
     }
 
-    const collateral = Collateral.from(info.data)
+    const collateral = { ...Collateral.from(info.data), pubkey: collateralPubkey }
     return collateral
   }
 
