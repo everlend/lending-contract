@@ -1,5 +1,6 @@
-import { LendingMarket } from '../src'
+import { Token, TOKEN_PROGRAM_ID, u64 } from '@solana/spl-token'
 import { Connection, Keypair, PublicKey } from '@solana/web3.js'
+import { LendingMarket } from '../src'
 
 const SECRET_KEY = Uint8Array.from([
   230, 130, 183, 211, 202, 141, 184, 115, 203, 212, 117, 219, 8, 19, 135, 200, 67, 52, 225, 10, 106,
@@ -13,11 +14,13 @@ const LIQUIDITY_PUBKEY: PublicKey = new PublicKey('BrmEecfTGZFoygN4RVUvPC3wNeGoT
 const COLLATERAL_PUBKEY: PublicKey = new PublicKey('A1EgEXQ4p3R6vgiv35gQNnc198QZ5D3YTL4edpmcnwQH')
 
 describe('LendingMarket', () => {
+  let payer: Keypair
+  let connection: Connection
   let lendingMarket: LendingMarket
 
   beforeAll(() => {
-    const connection = new Connection('http://127.0.0.1:8899', 'recent')
-    const payer = Keypair.fromSecretKey(SECRET_KEY)
+    connection = new Connection('http://127.0.0.1:8899', 'recent')
+    payer = Keypair.fromSecretKey(SECRET_KEY)
     lendingMarket = LendingMarket.init(connection, MARKET_PUBKEY, payer)
   })
 
@@ -68,6 +71,30 @@ describe('LendingMarket', () => {
       console.log(collateralTokens)
 
       expect(collateralTokens.length).toEqual(1)
+    })
+  })
+
+  describe('liquidityDeposit', () => {
+    test('liquidity deposit', async () => {
+      const liquidity = await lendingMarket.getLiquidityInfo(LIQUIDITY_PUBKEY)
+      const tokenMint = new Token(connection, liquidity.tokenMint, TOKEN_PROGRAM_ID, payer)
+      const poolMint = new Token(connection, liquidity.poolMint, TOKEN_PROGRAM_ID, payer)
+
+      const source = await tokenMint.createAccount(payer.publicKey)
+      const destination = await poolMint.createAccount(payer.publicKey)
+
+      const tokenMintInfo = await tokenMint.getMintInfo()
+      // const poolMintInfo = await tokenMint.getMintInfo()
+      const uiAmount = 0.05
+      const amount = new u64(uiAmount * Math.pow(10, tokenMintInfo.decimals))
+
+      await tokenMint.mintTo(source, payer, [], 999999999999)
+
+      const balanceBefore = (await tokenMint.getAccountInfo(liquidity.tokenAccount)).amount
+      await lendingMarket.liquidityDeposit(LIQUIDITY_PUBKEY, uiAmount, source, destination, payer)
+
+      const balanceAfter = (await tokenMint.getAccountInfo(liquidity.tokenAccount)).amount
+      expect(balanceAfter.cmp(balanceBefore.add(amount))).toEqual(0)
     })
   })
 })

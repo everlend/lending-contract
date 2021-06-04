@@ -30,8 +30,16 @@ export const CollateralLayout = BufferLayout.struct([
 ])
 
 export const MarketInsructionLayouts = {
+  LiquidityDeposit: {
+    index: 5,
+    layout: BufferLayout.struct([InstructionLayout, BaseLayout.uint64('amount')]),
+  },
+  LiquidityWithdraw: {
+    index: 6,
+    layout: BufferLayout.struct([InstructionLayout, BaseLayout.uint64('amount')]),
+  },
   CreateObligation: {
-    index: 1,
+    index: 7,
     layout: BufferLayout.struct([InstructionLayout]),
   },
 }
