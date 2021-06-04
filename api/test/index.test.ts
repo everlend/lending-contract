@@ -93,4 +93,26 @@ describe('LendingMarket', () => {
       expect(balanceAfter.cmp(balanceBefore.add(amount))).toEqual(0)
     })
   })
+
+  describe('liquidityWithdraw', () => {
+    test('liquidity withdraw', async () => {
+      const liquidity = await lendingMarket.getLiquidityInfo(LIQUIDITY_PUBKEY)
+      const tokenMint = new Token(connection, liquidity.tokenMint, TOKEN_PROGRAM_ID, payer)
+      const [source, destination] = await lendingMarket.generateLiquidityAccounts(LIQUIDITY_PUBKEY)
+
+      const uiAmount = 0.05
+      const amount = new u64(
+        uiAmount * Math.pow(10, await lendingMarket.getTokenDecimals(liquidity.tokenMint)),
+      )
+
+      await tokenMint.mintTo(source, payer, [], 999999999999)
+      await lendingMarket.liquidityDeposit(LIQUIDITY_PUBKEY, uiAmount, source, destination)
+
+      const balanceBefore = (await tokenMint.getAccountInfo(liquidity.tokenAccount)).amount
+      await lendingMarket.liquidityWithdraw(LIQUIDITY_PUBKEY, uiAmount, destination, source)
+
+      const balanceAfter = (await tokenMint.getAccountInfo(liquidity.tokenAccount)).amount
+      expect(balanceAfter.cmp(balanceBefore.sub(amount))).toEqual(0)
+    })
+  })
 })
