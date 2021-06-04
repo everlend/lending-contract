@@ -9,7 +9,7 @@ import {
 import { CollateralLayout, LiquidityLayout, MarketLayout } from './layout'
 import { Collateral, Liquidity, Market } from './state'
 import * as Instruction from './instruction'
-import { MintLayout, u64 } from '@solana/spl-token'
+import { MintLayout, Token, TOKEN_PROGRAM_ID, u64 } from '@solana/spl-token'
 
 export const PROGRAM_ID: PublicKey = new PublicKey('69LK6qziCCnqgmUPYpuiJ2y8JavKVRrCZ4pDekSyDZTn')
 
@@ -102,6 +102,34 @@ export class LendingMarket {
     }
 
     return info
+  }
+
+  /**
+   * Generate liquidity accounts for source & destination
+   * @param liquidityPubkey Liquidity pubkey
+   * @returns [token account, pool account]
+   */
+  async generateLiquidityAccounts(liquidityPubkey: PublicKey) {
+    const liquidity = await this.getLiquidityInfo(liquidityPubkey)
+    const tokenMint = new Token(this.connection, liquidity.tokenMint, TOKEN_PROGRAM_ID, this.payer)
+    const poolMint = new Token(this.connection, liquidity.poolMint, TOKEN_PROGRAM_ID, this.payer)
+
+    return Promise.all([
+      tokenMint.createAccount(this.payer.publicKey),
+      poolMint.createAccount(this.payer.publicKey),
+    ])
+  }
+
+  /**
+   * Generate collateral source account
+   * @param collateralPubkey Collateral Pubkey
+   * @returns [token account]
+   */
+  async generateCollateralAccounts(collateralPubkey: PublicKey) {
+    const collateral = await this.getCollateralInfo(collateralPubkey)
+    const tokenMint = new Token(this.connection, collateral.tokenMint, TOKEN_PROGRAM_ID, this.payer)
+
+    return Promise.all([tokenMint.createAccount(this.payer.publicKey)])
   }
 
   /**

@@ -78,13 +78,9 @@ describe('LendingMarket', () => {
     test('liquidity deposit', async () => {
       const liquidity = await lendingMarket.getLiquidityInfo(LIQUIDITY_PUBKEY)
       const tokenMint = new Token(connection, liquidity.tokenMint, TOKEN_PROGRAM_ID, payer)
-      const poolMint = new Token(connection, liquidity.poolMint, TOKEN_PROGRAM_ID, payer)
-
-      const source = await tokenMint.createAccount(payer.publicKey)
-      const destination = await poolMint.createAccount(payer.publicKey)
+      const [source, destination] = await lendingMarket.generateLiquidityAccounts(LIQUIDITY_PUBKEY)
 
       const tokenMintInfo = await tokenMint.getMintInfo()
-      // const poolMintInfo = await tokenMint.getMintInfo()
       const uiAmount = 0.05
       const amount = new u64(uiAmount * Math.pow(10, tokenMintInfo.decimals))
 
