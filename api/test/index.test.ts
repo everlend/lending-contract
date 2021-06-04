@@ -102,7 +102,7 @@ describe('LendingMarket', () => {
 
       const uiAmount = 0.05
       const amount = new u64(
-        uiAmount * Math.pow(10, await lendingMarket.getTokenDecimals(liquidity.tokenMint)),
+        uiAmount * Math.pow(10, await lendingMarket.getMintDecimals(liquidity.tokenMint)),
       )
 
       await tokenMint.mintTo(source, payer, [], 999999999999)

@@ -1,6 +1,7 @@
-import { Token, TOKEN_PROGRAM_ID, u64 } from '@solana/spl-token'
+import { MintLayout, Token, u64 } from '@solana/spl-token'
 import {
   Connection,
+  Keypair,
   PublicKey,
   sendAndConfirmTransaction,
   Signer,
@@ -9,19 +10,36 @@ import {
 import * as Instruction from './instruction'
 import { CollateralLayout, LiquidityLayout, MarketLayout } from './layout'
 import { Collateral, Liquidity, Market } from './state'
+import { createTokenAccountTx } from './transaction'
 
 export const PROGRAM_ID: PublicKey = new PublicKey('69LK6qziCCnqgmUPYpuiJ2y8JavKVRrCZ4pDekSyDZTn')
 
+export * from './instruction'
+export * from './transaction'
+export * from './layout'
+export * from './utils'
+
 export class LendingMarket {
+  private _payer: Signer
+
   constructor(
     private connection: Connection,
     public pubkey: PublicKey,
     public programId: PublicKey,
-    public payer: Signer,
-  ) {}
+    payer?: Signer,
+  ) {
+    this._payer = payer
+  }
 
-  static init(connection: Connection, pubkey: PublicKey, payer: Signer) {
+  static init(connection: Connection, pubkey: PublicKey, payer?: Signer) {
     return new LendingMarket(connection, pubkey, PROGRAM_ID, payer)
+  }
+
+  get payer() {
+    if (!this._payer) {
+      throw new Error('Payer not specified')
+    }
+    return this._payer
   }
 
   async getMarketInfo() {
@@ -110,13 +128,34 @@ export class LendingMarket {
    */
   async generateLiquidityAccounts(liquidityPubkey: PublicKey) {
     const liquidity = await this.getLiquidityInfo(liquidityPubkey)
-    const tokenMint = new Token(this.connection, liquidity.tokenMint, TOKEN_PROGRAM_ID, this.payer)
-    const poolMint = new Token(this.connection, liquidity.poolMint, TOKEN_PROGRAM_ID, this.payer)
+    const rent = await Token.getMinBalanceRentForExemptAccount(this.connection)
+    const tokenAccount = Keypair.generate()
+    const poolAccount = Keypair.generate()
 
-    return Promise.all([
-      tokenMint.createAccount(this.payer.publicKey),
-      poolMint.createAccount(this.payer.publicKey),
+    const tx = new Transaction().add(
+      createTokenAccountTx(
+        this.payer.publicKey,
+        tokenAccount.publicKey,
+        liquidity.tokenMint,
+        this.payer.publicKey,
+        rent,
+      ),
+      createTokenAccountTx(
+        this.payer.publicKey,
+        poolAccount.publicKey,
+        liquidity.poolMint,
+        this.payer.publicKey,
+        rent,
+      ),
+    )
+    const signature = await sendAndConfirmTransaction(this.connection, tx, [
+      this.payer,
+      tokenAccount,
+      poolAccount,
     ])
+    console.log(`Signature: ${signature}`)
+
+    return [tokenAccount.publicKey, poolAccount.publicKey]
   }
 
   /**
@@ -126,20 +165,27 @@ export class LendingMarket {
    */
   async generateCollateralAccounts(collateralPubkey: PublicKey) {
     const collateral = await this.getCollateralInfo(collateralPubkey)
-    const tokenMint = new Token(this.connection, collateral.tokenMint, TOKEN_PROGRAM_ID, this.payer)
+    const rent = await Token.getMinBalanceRentForExemptAccount(this.connection)
+    const tokenAccount = Keypair.generate()
 
-    return Promise.all([tokenMint.createAccount(this.payer.publicKey)])
+    const tx = createTokenAccountTx(
+      this.payer.publicKey,
+      tokenAccount.publicKey,
+      collateral.tokenMint,
+      this.payer.publicKey,
+      rent,
+    )
+
+    const signature = await sendAndConfirmTransaction(this.connection, tx, [
+      this.payer,
+      tokenAccount,
+    ])
+    console.log(`Signature: ${signature}`)
+
+    return [tokenAccount.publicKey]
   }
 
-  /**
-   * Transfer tokens to liquidity account and mint pool tokens
-   * @param liquidityPubkey Liquidity pubkey
-   * @param uiAmount Amount tokens to deposit
-   * @param source Source account of token mint
-   * @param destination Destination account of pool mint
-   * @param payer Signer for transfer tokens
-   */
-  async liquidityDeposit(
+  async liquidityDepositTx(
     liquidityPubkey: PublicKey,
     uiAmount: number,
     source: PublicKey,
@@ -152,9 +198,7 @@ export class LendingMarket {
       this.programId,
     )
 
-    const amount = new u64(
-      uiAmount * Math.pow(10, await this.getTokenDecimals(liquidity.tokenMint)),
-    )
+    const amount = new u64(uiAmount * Math.pow(10, await this.getMintDecimals(liquidity.tokenMint)))
 
     const tx = new Transaction().add(
       Instruction.liquidityDeposit({
@@ -171,19 +215,32 @@ export class LendingMarket {
       }),
     )
 
+    return tx
+  }
+
+  /**
+   * Transfer tokens to liquidity account and mint pool tokens
+   * @param liquidityPubkey Liquidity pubkey
+   * @param uiAmount Amount tokens to deposit
+   * @param source Source account of token mint
+   * @param destination Destination account of pool mint
+   * @param payer Signer for transfer tokens
+   */
+  async liquidityDeposit(
+    liquidityPubkey: PublicKey,
+    uiAmount: number,
+    source: PublicKey,
+    destination: PublicKey,
+  ) {
+    const tx = await this.liquidityDepositTx(liquidityPubkey, uiAmount, source, destination)
+
+    console.log(this.payer)
+
     const signature = await sendAndConfirmTransaction(this.connection, tx, [this.payer])
     console.log(`Signature: ${signature}`)
   }
 
-  /**
-   * Burn pool tokens and transfer liquidity tokens
-   * @param liquidityPubkey Liquidity pubkey
-   * @param uiAmount Amount tokens to deposit
-   * @param source Source account of pool mint
-   * @param destination Destination account of token account
-   * @param payer Signer for transfer tokens
-   */
-  async liquidityWithdraw(
+  async liquidityWithdrawTx(
     liquidityPubkey: PublicKey,
     uiAmount: number,
     source: PublicKey,
@@ -196,7 +253,7 @@ export class LendingMarket {
       this.programId,
     )
 
-    const amount = new u64(uiAmount * Math.pow(10, await this.getTokenDecimals(liquidity.poolMint)))
+    const amount = new u64(uiAmount * Math.pow(10, await this.getMintDecimals(liquidity.poolMint)))
 
     const tx = new Transaction().add(
       Instruction.liquidityWithdraw({
@@ -213,14 +270,33 @@ export class LendingMarket {
       }),
     )
 
+    return tx
+  }
+
+  /**
+   * Burn pool tokens and transfer liquidity tokens
+   * @param liquidityPubkey Liquidity pubkey
+   * @param uiAmount Amount tokens to deposit
+   * @param source Source account of pool mint
+   * @param destination Destination account of token account
+   * @param payer Signer for transfer tokens
+   */
+  async liquidityWithdraw(
+    liquidityPubkey: PublicKey,
+    uiAmount: number,
+    source: PublicKey,
+    destination: PublicKey,
+  ) {
+    const tx = await this.liquidityWithdrawTx(liquidityPubkey, uiAmount, source, destination)
+
     const signature = await sendAndConfirmTransaction(this.connection, tx, [this.payer])
     console.log(`Signature: ${signature}`)
   }
 
-  async createObligation(
+  async createObligationTx(
     liquidityPubkey: PublicKey,
     collateralPubkey: PublicKey,
-  ): Promise<PublicKey> {
+  ): Promise<{ tx: Transaction; pubkey: PublicKey }> {
     const [obligationAuthority] = await PublicKey.findProgramAddress(
       [
         this.payer.publicKey.toBuffer(),
@@ -249,16 +325,25 @@ export class LendingMarket {
       }),
     )
 
+    return { tx, pubkey: obligationPubkey }
+  }
+
+  async createObligation(
+    liquidityPubkey: PublicKey,
+    collateralPubkey: PublicKey,
+  ): Promise<PublicKey> {
+    const { tx, pubkey } = await this.createObligationTx(liquidityPubkey, collateralPubkey)
+
     const signature = await sendAndConfirmTransaction(this.connection, tx, [this.payer])
     console.log(`Signature: ${signature}`)
 
-    return obligationPubkey
+    return pubkey
   }
 
-  async getTokenDecimals(pubkey: PublicKey) {
-    const token = new Token(this.connection, pubkey, TOKEN_PROGRAM_ID, this.payer)
-    const tokenInfo = await token.getMintInfo()
+  async getMintDecimals(pubkey: PublicKey) {
+    const mintInfo = await this.connection.getAccountInfo(pubkey)
+    const mint = MintLayout.decode(mintInfo.data)
 
-    return tokenInfo.decimals
+    return mint.decimals
   }
 }
