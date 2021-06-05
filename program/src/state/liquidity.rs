@@ -68,11 +68,11 @@ impl Liquidity {
         let result = if pool_mint_supply == 0 || token_account_amount == 0 {
             amount
         } else {
-            amount
-                .checked_mul(pool_mint_supply)
+            (amount as u128)
+                .checked_mul(pool_mint_supply as u128)
                 .ok_or(LendingError::CalculationFailure)?
-                .checked_div(token_account_amount)
-                .ok_or(LendingError::CalculationFailure)?
+                .checked_div(token_account_amount as u128)
+                .ok_or(LendingError::CalculationFailure)? as u64
         };
 
         Ok(result)
@@ -88,11 +88,11 @@ impl Liquidity {
         let result = if pool_mint_supply == 0 || token_account_amount == 0 {
             amount
         } else {
-            amount
-                .checked_mul(token_account_amount)
+            (amount as u128)
+                .checked_mul(token_account_amount as u128)
                 .ok_or(LendingError::CalculationFailure)?
-                .checked_div(pool_mint_supply)
-                .ok_or(LendingError::CalculationFailure)?
+                .checked_div(pool_mint_supply as u128)
+                .ok_or(LendingError::CalculationFailure)? as u64
         };
 
         Ok(result)
