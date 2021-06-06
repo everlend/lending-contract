@@ -276,6 +276,7 @@ pub fn update_liquidity_token(
 }
 
 /// Create `CreateCollateralToken` instruction
+#[allow(clippy::too_many_arguments)]
 pub fn create_collateral_token(
     program_id: &Pubkey,
     ratio_initial: u64,
@@ -343,6 +344,7 @@ pub fn update_collateral_token(
 }
 
 /// Create `LiquidityDeposit` instruction
+#[allow(clippy::too_many_arguments)]
 pub fn liquidity_deposit(
     program_id: &Pubkey,
     amount: u64,
@@ -378,6 +380,7 @@ pub fn liquidity_deposit(
 }
 
 /// Create `LiquidityWithdraw` instruction
+#[allow(clippy::too_many_arguments)]
 pub fn liquidity_withdraw(
     program_id: &Pubkey,
     amount: u64,
@@ -445,6 +448,7 @@ pub fn create_obligation(
 }
 
 /// Create `ObligationCollateralDeposit` instruction
+#[allow(clippy::too_many_arguments)]
 pub fn obligation_collateral_deposit(
     program_id: &Pubkey,
     amount: u64,
@@ -476,6 +480,7 @@ pub fn obligation_collateral_deposit(
 }
 
 /// Create `ObligationCollateralWithdraw` instruction
+#[allow(clippy::too_many_arguments)]
 pub fn obligation_collateral_withdraw(
     program_id: &Pubkey,
     amount: u64,
@@ -509,6 +514,7 @@ pub fn obligation_collateral_withdraw(
 }
 
 /// Create `ObligationLiquidityBorrow` instruction
+#[allow(clippy::too_many_arguments)]
 pub fn obligation_liquidity_borrow(
     program_id: &Pubkey,
     amount: u64,
@@ -544,6 +550,7 @@ pub fn obligation_liquidity_borrow(
 }
 
 /// Create `ObligationLiquidityRepay` instruction
+#[allow(clippy::too_many_arguments)]
 pub fn obligation_liquidity_repay(
     program_id: &Pubkey,
     amount: u64,

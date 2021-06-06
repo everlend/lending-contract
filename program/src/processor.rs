@@ -30,7 +30,7 @@ impl Processor {
         let rent = &Rent::from_account_info(rent_info)?;
 
         if !owner_info.is_signer {
-            return Err(ProgramError::MissingRequiredSignature.into());
+            return Err(ProgramError::MissingRequiredSignature);
         }
 
         assert_rent_exempt(rent, market_info)?;
@@ -69,7 +69,7 @@ impl Processor {
         let rent = &Rent::from_account_info(rent_info)?;
 
         if !market_owner_info.is_signer {
-            return Err(ProgramError::MissingRequiredSignature.into());
+            return Err(ProgramError::MissingRequiredSignature);
         }
 
         if market_info.owner != program_id {
@@ -82,7 +82,7 @@ impl Processor {
 
         if market.owner != *market_owner_info.key {
             msg!("Market owner provided does not match owner in the market state");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         // Create liquidity account
@@ -158,7 +158,7 @@ impl Processor {
 
         if market.owner != *market_owner_info.key {
             msg!("Market owner provided does not match owner in the market state");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         // Get liquidity state
@@ -166,7 +166,7 @@ impl Processor {
 
         if liquidity.market != *market_info.key {
             msg!("Liquidity market does not match the market provided");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         // Update liquidity state
@@ -197,7 +197,7 @@ impl Processor {
         let rent = &Rent::from_account_info(rent_info)?;
 
         if !market_owner_info.is_signer {
-            return Err(ProgramError::MissingRequiredSignature.into());
+            return Err(ProgramError::MissingRequiredSignature);
         }
 
         if market_info.owner != program_id {
@@ -210,7 +210,7 @@ impl Processor {
 
         if market.owner != *market_owner_info.key {
             msg!("Market owner provided does not match owner in the market state");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         // Create collateral account
@@ -279,7 +279,7 @@ impl Processor {
 
         if market.owner != *market_owner_info.key {
             msg!("Market owner provided does not match owner in the market state");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         // Get collateral state
@@ -287,7 +287,7 @@ impl Processor {
 
         if collateral.market != *market_info.key {
             msg!("Collateral market does not match the market provided");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         // Update collateral state
@@ -327,17 +327,17 @@ impl Processor {
 
         if liquidity.market != *market_info.key {
             msg!("Liquidity market does not match the market provided");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         if liquidity.token_account != *token_account_info.key {
             msg!("Liquidity token account does not match the token account provided");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         if liquidity.pool_mint != *pool_mint_info.key {
             msg!("Liquidity pool mint does not match the pool mint provided");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         // TODO: We can store total values in the liquidity state
@@ -400,17 +400,17 @@ impl Processor {
 
         if liquidity.market != *market_info.key {
             msg!("Liquidity market does not match the market provided");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         if liquidity.token_account != *token_account_info.key {
             msg!("Liquidity token account does not match the token account provided");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         if liquidity.pool_mint != *pool_mint_info.key {
             msg!("Liquidity pool mint does not match the pool mint provided");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         let token_account_amount =
@@ -459,7 +459,7 @@ impl Processor {
         let rent = &Rent::from_account_info(rent_info)?;
 
         if !obligation_owner_info.is_signer {
-            return Err(ProgramError::MissingRequiredSignature.into());
+            return Err(ProgramError::MissingRequiredSignature);
         }
 
         if market_info.owner != program_id {
@@ -482,12 +482,12 @@ impl Processor {
 
         if liquidity.market != *market_info.key {
             msg!("Liquidity market does not match the market provided");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         if liquidity.status != LiquidityStatus::Active {
             msg!("Liquidity does not active");
-            return Err(ProgramError::InvalidAccountData.into());
+            return Err(ProgramError::InvalidAccountData);
         }
 
         // Get collateral state
@@ -495,12 +495,12 @@ impl Processor {
 
         if collateral.market != *market_info.key {
             msg!("Collateral market does not match the market provided");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         if collateral.status != CollateralStatus::Active {
             msg!("Collateral does not active");
-            return Err(ProgramError::InvalidAccountData.into());
+            return Err(ProgramError::InvalidAccountData);
         }
 
         let (obligation_authority, bump_seed) = find_obligation_authority(
@@ -583,12 +583,12 @@ impl Processor {
 
         if obligation.collateral != *collateral_info.key {
             msg!("Obligation collateral does not match the collateral provided");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         if obligation.market != *market_info.key {
             msg!("Obligation market does not match the market provided");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         // Get collateral state
@@ -596,7 +596,7 @@ impl Processor {
 
         if collateral.token_account != *collateral_token_account_info.key {
             msg!("Collateral token account does not match the token account provided");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         obligation.collateral_deposit(amount)?;
@@ -631,7 +631,7 @@ impl Processor {
         let _token_program_info = next_account_info(account_info_iter)?;
 
         if !obligation_owner_info.is_signer {
-            return Err(ProgramError::MissingRequiredSignature.into());
+            return Err(ProgramError::MissingRequiredSignature);
         }
 
         if market_info.owner != program_id {
@@ -654,17 +654,17 @@ impl Processor {
 
         if obligation.owner != *obligation_owner_info.key {
             msg!("Obligation owner does not match the owner provided");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         if obligation.collateral != *collateral_info.key {
             msg!("Obligation collateral does not match the collateral provided");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         if obligation.market != *market_info.key {
             msg!("Obligation market does not match the market provided");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         // Get collateral state
@@ -672,14 +672,14 @@ impl Processor {
 
         if collateral.token_account != *collateral_token_account_info.key {
             msg!("Collateral token account does not match the token account provided");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         // Calculation of available funds for withdrawal
         let withdrawal_limit = obligation.calc_withdrawal_limit(collateral.ratio_initial)?;
         if amount > withdrawal_limit {
             msg!("Withdrawal limit exceeded");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         obligation.collateral_withdraw(amount)?;
@@ -718,7 +718,7 @@ impl Processor {
         let _token_program_info = next_account_info(account_info_iter)?;
 
         if !obligation_owner_info.is_signer {
-            return Err(ProgramError::MissingRequiredSignature.into());
+            return Err(ProgramError::MissingRequiredSignature);
         }
 
         if market_info.owner != program_id {
@@ -746,22 +746,22 @@ impl Processor {
 
         if obligation.owner != *obligation_owner_info.key {
             msg!("Obligation owner does not match the owner provided");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         if obligation.liquidity != *liquidity_info.key {
             msg!("Obligation liquidity does not match the liquidity provided");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         if obligation.collateral != *collateral_info.key {
             msg!("Obligation collateral does not match the collateral provided");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         if obligation.market != *market_info.key {
             msg!("Obligation market does not match the market provided");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         // Get collateral state
@@ -772,14 +772,14 @@ impl Processor {
 
         if liquidity.token_account != *liquidity_token_account_info.key {
             msg!("Liquidity token account does not match the token account provided");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         // Calculation of available funds for borrowing
         let borrowing_limit = obligation.calc_borrowing_limit(collateral.ratio_initial)?;
         if amount > borrowing_limit {
             msg!("Borrowing limit exceeded");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         obligation.liquidity_borrow(amount)?;
@@ -835,12 +835,12 @@ impl Processor {
 
         if obligation.liquidity != *liquidity_info.key {
             msg!("Obligation liquidity does not match the liquidity provided");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         if obligation.market != *market_info.key {
             msg!("Obligation market does not match the market provided");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         // Get liquidity state
@@ -848,13 +848,13 @@ impl Processor {
 
         if liquidity.token_account != *liquidity_token_account_info.key {
             msg!("Collateral token account does not match the token account provided");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
 
         let repay_limit = obligation.amount_liquidity_borrowed;
         if amount > repay_limit {
             msg!("Repay limit exceeded");
-            return Err(ProgramError::InvalidArgument.into());
+            return Err(ProgramError::InvalidArgument);
         }
         obligation.liquidity_repay(amount)?;
         Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
@@ -957,6 +957,7 @@ impl Processor {
 }
 
 /// Create account with seed
+#[allow(clippy::too_many_arguments)]
 pub fn create_account_with_seed<'a, S: Pack>(
     program_id: &Pubkey,
     from: AccountInfo<'a>,
@@ -1087,7 +1088,7 @@ pub fn spl_token_burn<'a>(
 fn assert_rent_exempt(rent: &Rent, account_info: &AccountInfo) -> ProgramResult {
     if !rent.is_exempt(account_info.lamports(), account_info.data_len()) {
         msg!(&rent.minimum_balance(account_info.data_len()).to_string());
-        Err(ProgramError::AccountNotRentExempt.into())
+        Err(ProgramError::AccountNotRentExempt)
     } else {
         Ok(())
     }
@@ -1095,7 +1096,7 @@ fn assert_rent_exempt(rent: &Rent, account_info: &AccountInfo) -> ProgramResult 
 
 fn assert_uninitialized<T: IsInitialized>(account: &T) -> ProgramResult {
     if account.is_initialized() {
-        Err(ProgramError::AccountAlreadyInitialized.into())
+        Err(ProgramError::AccountAlreadyInitialized)
     } else {
         Ok(())
     }
