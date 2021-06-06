@@ -28,7 +28,7 @@ async fn success() {
 
     let liquidity = liquidity_info.get_data(&mut context).await;
 
-    assert_eq!(liquidity.status, LiquidityStatus::InActive);
+    assert_eq!(liquidity.status, LiquidityStatus::Inactive);
     assert_eq!(market_info.get_data(&mut context).await.liquidity_tokens, 1);
 }
 

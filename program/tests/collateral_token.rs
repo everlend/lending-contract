@@ -31,7 +31,7 @@ async fn success() {
 
     let collateral = collateral_info.get_data(&mut context).await;
 
-    assert_eq!(collateral.status, CollateralStatus::InActive);
+    assert_eq!(collateral.status, CollateralStatus::Inactive);
     assert_eq!(collateral.ratio_initial, collateral::RATIO_INITIAL);
     assert_eq!(
         market_info.get_data(&mut context).await.collateral_tokens,
