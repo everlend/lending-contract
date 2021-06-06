@@ -675,14 +675,11 @@ impl Processor {
             return Err(ProgramError::InvalidArgument);
         }
 
-        // Calculation of available funds for withdrawal
-        let withdrawal_limit = obligation.calc_withdrawal_limit(collateral.ratio_initial)?;
-        if amount > withdrawal_limit {
-            msg!("Withdrawal limit exceeded");
-            return Err(ProgramError::InvalidArgument);
-        }
-
         obligation.collateral_withdraw(amount)?;
+        
+        // Check obligation health
+        collateral.check_health(obligation.calc_health()?)?;
+
         Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
 
         let (_, bump_seed) = find_program_address(program_id, market_info.key);
@@ -775,15 +772,11 @@ impl Processor {
             return Err(ProgramError::InvalidArgument);
         }
 
-        // Calculation of available funds for borrowing
-        let borrowing_limit = obligation.calc_borrowing_limit(collateral.ratio_initial)?;
-        if amount > borrowing_limit {
-            msg!("Borrowing limit exceeded");
-            return Err(ProgramError::InvalidArgument);
-        }
-
         obligation.liquidity_borrow(amount)?;
         liquidity.borrow(amount)?;
+
+        // Check obligation health
+        collateral.check_health(obligation.calc_health()?)?;
 
         Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
         Liquidity::pack(liquidity, *liquidity_info.data.borrow_mut())?;

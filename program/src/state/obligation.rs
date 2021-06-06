@@ -83,6 +83,19 @@ impl Obligation {
         Ok(())
     }
 
+    /// Calculate obligation health ratio
+    pub fn calc_health(&self) -> Result<u64, ProgramError> {
+        // TODO: Add oracle interface here to calculate collateral and borrowed liquidity value.
+        // For now we assume that collateral and liquidity tokens have 1:1 value ratio
+        let result = (self.amount_liquidity_borrowed as u128)
+            .checked_mul(RATIO_POWER as u128)
+            .ok_or(LendingError::CalculationFailure)?
+            .checked_div(self.amount_collateral_deposited as u128)
+            .unwrap_or(0) as u64;
+
+        Ok(result)
+    }
+
     /// Calculation of available funds for withdrawal
     pub fn calc_withdrawal_limit(&self, ratio_initial: u64) -> Result<u64, ProgramError> {
         // deposited - borrowed / ratio_initial

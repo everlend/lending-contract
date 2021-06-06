@@ -17,6 +17,9 @@ pub enum LendingError {
     /// The calculation failed.
     #[error("Calculation failure")]
     CalculationFailure,
+    /// Collateral health check failed, returned if user borrows too much or withdraws too much collateral.
+    #[error("Collateral health check failed")]
+    CollateralHealthCheckFailed,
 }
 
 impl PrintProgramError for LendingError {
