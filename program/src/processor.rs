@@ -768,7 +768,7 @@ impl Processor {
         let collateral = Collateral::unpack(&collateral_info.data.borrow())?;
 
         // Get liquidity state
-        let liquidity = Liquidity::unpack(&liquidity_info.data.borrow())?;
+        let mut liquidity = Liquidity::unpack(&liquidity_info.data.borrow())?;
 
         if liquidity.token_account != *liquidity_token_account_info.key {
             msg!("Liquidity token account does not match the token account provided");
@@ -783,7 +783,10 @@ impl Processor {
         }
 
         obligation.liquidity_borrow(amount)?;
+        liquidity.borrow(amount)?;
+
         Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
+        Liquidity::pack(liquidity, *liquidity_info.data.borrow_mut())?;
 
         let (_, bump_seed) = find_program_address(program_id, market_info.key);
         let signers_seeds = &[&market_info.key.to_bytes()[..32], &[bump_seed]];
@@ -844,7 +847,7 @@ impl Processor {
         }
 
         // Get liquidity state
-        let liquidity = Liquidity::unpack(&liquidity_info.data.borrow())?;
+        let mut liquidity = Liquidity::unpack(&liquidity_info.data.borrow())?;
 
         if liquidity.token_account != *liquidity_token_account_info.key {
             msg!("Collateral token account does not match the token account provided");
@@ -857,7 +860,10 @@ impl Processor {
             return Err(ProgramError::InvalidArgument);
         }
         obligation.liquidity_repay(amount)?;
+        liquidity.repay(amount)?;
+
         Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
+        Liquidity::pack(liquidity, *liquidity_info.data.borrow_mut())?;
 
         // Transfer liquidity from source borrower to token account
         spl_token_transfer(

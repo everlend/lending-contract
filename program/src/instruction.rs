@@ -532,7 +532,7 @@ pub fn obligation_liquidity_borrow(
 
     let accounts = vec![
         AccountMeta::new(*obligation, false),
-        AccountMeta::new_readonly(*liquidity, false),
+        AccountMeta::new(*liquidity, false),
         AccountMeta::new_readonly(*collateral, false),
         AccountMeta::new(*destination, false),
         AccountMeta::new(*liquidity_token_account, false),
@@ -566,7 +566,7 @@ pub fn obligation_liquidity_repay(
 
     let accounts = vec![
         AccountMeta::new(*obligation, false),
-        AccountMeta::new_readonly(*liquidity, false),
+        AccountMeta::new(*liquidity, false),
         AccountMeta::new(*source, false),
         AccountMeta::new(*liquidity_token_account, false),
         AccountMeta::new_readonly(*market, false),

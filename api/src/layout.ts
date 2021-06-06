@@ -17,6 +17,7 @@ export const LiquidityLayout = BufferLayout.struct([
   BaseLayout.publicKey('token_mint'),
   BaseLayout.publicKey('token_account'),
   BaseLayout.publicKey('pool_mint'),
+  BufferLayout.uint64('amount_borrowed'),
 ])
 
 export const CollateralLayout = BufferLayout.struct([
