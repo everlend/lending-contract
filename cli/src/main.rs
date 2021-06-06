@@ -38,18 +38,18 @@ type CommandResult = Result<Option<Transaction>, Error>;
 arg_enum! {
     #[derive(Debug)]
     pub enum ArgTokenStatus {
-        InActive = 0,
+        Inactive = 0,
         Active = 1,
-        InActiveAndVisible = 2,
+        InactiveAndVisible = 2,
     }
 }
 
 impl From<ArgTokenStatus> for LiquidityStatus {
     fn from(other: ArgTokenStatus) -> LiquidityStatus {
         match other {
-            ArgTokenStatus::InActive => LiquidityStatus::InActive,
+            ArgTokenStatus::Inactive => LiquidityStatus::Inactive,
             ArgTokenStatus::Active => LiquidityStatus::Active,
-            ArgTokenStatus::InActiveAndVisible => LiquidityStatus::InActiveAndVisible,
+            ArgTokenStatus::InactiveAndVisible => LiquidityStatus::InactiveAndVisible,
         }
     }
 }
@@ -57,9 +57,9 @@ impl From<ArgTokenStatus> for LiquidityStatus {
 impl From<ArgTokenStatus> for CollateralStatus {
     fn from(other: ArgTokenStatus) -> CollateralStatus {
         match other {
-            ArgTokenStatus::InActive => CollateralStatus::InActive,
+            ArgTokenStatus::Inactive => CollateralStatus::Inactive,
             ArgTokenStatus::Active => CollateralStatus::Active,
-            ArgTokenStatus::InActiveAndVisible => CollateralStatus::InActiveAndVisible,
+            ArgTokenStatus::InactiveAndVisible => CollateralStatus::InactiveAndVisible,
         }
     }
 }
@@ -514,7 +514,7 @@ fn main() {
                 ),
         )
         .subcommand(
-            SubCommand::with_name("create-liquidity-token")
+            SubCommand::with_name("create-liquidity")
                 .about("Add a liquidity token")
                 .arg(
                     Arg::with_name("market_pubkey")
@@ -536,7 +536,7 @@ fn main() {
                 ),
         )
         .subcommand(
-            SubCommand::with_name("create-collateral-token")
+            SubCommand::with_name("create-collateral")
                 .about("Add a collateral token")
                 .arg(
                     Arg::with_name("market_pubkey")
@@ -576,7 +576,7 @@ fn main() {
                 ),
         )
         .subcommand(
-            SubCommand::with_name("update-liquidity-token")
+            SubCommand::with_name("update-liquidity")
                 .about("Update a liquidity token")
                 .arg(
                     Arg::with_name("liquidity_pubkey")
@@ -616,7 +616,7 @@ fn main() {
                 ),
         )
         .subcommand(
-            SubCommand::with_name("update-collateral-token")
+            SubCommand::with_name("update-collateral")
                 .about("Update a collateral token")
                 .arg(
                     Arg::with_name("collateral_pubkey")
@@ -727,12 +727,12 @@ fn main() {
             let market_pubkey = pubkey_of(arg_matches, "market_pubkey").unwrap();
             command_market_info(&config, &market_pubkey)
         }
-        ("create-liquidity-token", Some(arg_matches)) => {
+        ("create-liquidity", Some(arg_matches)) => {
             let market_pubkey = pubkey_of(arg_matches, "market_pubkey").unwrap();
             let token_mint = pubkey_of(arg_matches, "token_mint").unwrap();
             command_create_liquidity_token(&config, &market_pubkey, &token_mint)
         }
-        ("create-collateral-token", Some(arg_matches)) => {
+        ("create-collateral", Some(arg_matches)) => {
             let market_pubkey = pubkey_of(arg_matches, "market_pubkey").unwrap();
             let token_mint = pubkey_of(arg_matches, "token_mint").unwrap();
             let ratio_initial = value_of::<f64>(arg_matches, "ratio_initial").unwrap();
@@ -745,7 +745,7 @@ fn main() {
                 ratio_healthy,
             )
         }
-        ("update-liquidity-token", Some(arg_matches)) => {
+        ("update-liquidity", Some(arg_matches)) => {
             let liquidity_pubkey = pubkey_of(arg_matches, "liquidity_pubkey");
             let market_pubkey = pubkey_of(arg_matches, "market_pubkey");
             let liquidity_index = value_of::<u64>(arg_matches, "liquidity_index");
@@ -758,7 +758,7 @@ fn main() {
                 LiquidityStatus::from(status),
             )
         }
-        ("update-collateral-token", Some(arg_matches)) => {
+        ("update-collateral", Some(arg_matches)) => {
             let collateral_pubkey = pubkey_of(arg_matches, "collateral_pubkey");
             let market_pubkey = pubkey_of(arg_matches, "market_pubkey");
             let collateral_index = value_of::<u64>(arg_matches, "collateral_index");

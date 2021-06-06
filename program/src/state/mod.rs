@@ -22,7 +22,7 @@ pub const RATIO_POWER: u64 = 1_000_000_000;
 
 /// Convert the UI representation of a ratio (like 0.5) to the raw ratio
 pub fn ui_ratio_to_ratio(ui_ratio: f64) -> u64 {
-    (ui_ratio * RATIO_POWER as f64) as u64
+    (ui_ratio * RATIO_POWER as f64).round() as u64
 }
 
 /// Convert the raw ratio (like 500_000_000) to the UI representation

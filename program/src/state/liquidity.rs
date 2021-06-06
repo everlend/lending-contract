@@ -16,16 +16,16 @@ use solana_program::{
 #[derive(Clone, Copy, Debug, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
 pub enum LiquidityStatus {
     /// Inactive and invisible
-    InActive = 0,
+    Inactive = 0,
     /// Active
     Active = 1,
     /// Inactive but visible
-    InActiveAndVisible = 2,
+    InactiveAndVisible = 2,
 }
 
 impl Default for LiquidityStatus {
     fn default() -> Self {
-        LiquidityStatus::InActive
+        LiquidityStatus::Inactive
     }
 }
 
@@ -51,7 +51,7 @@ impl Liquidity {
     /// Initialize a collateral
     pub fn init(&mut self, params: InitLiquidityParams) {
         self.version = PROGRAM_VERSION;
-        self.status = LiquidityStatus::InActive;
+        self.status = LiquidityStatus::Inactive;
         self.market = params.market;
         self.token_mint = params.token_mint;
         self.token_account = params.token_account;
