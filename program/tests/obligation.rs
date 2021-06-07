@@ -233,7 +233,7 @@ async fn liquidity_borrow() {
         .await
         .unwrap();
 
-    let borrow_ammount = DEPOSIT_AMOUNT * collateral::RATIO_INITIAL / (100 * RATIO_POWER);
+    let borrow_ammount = DEPOSIT_AMOUNT * collateral::RATIO_INITIAL / RATIO_POWER;
     println!("Borrow amount: {}", borrow_ammount);
     obligation_info
         .liquidity_borrow(
@@ -252,6 +252,11 @@ async fn liquidity_borrow() {
             .get_data(&mut context)
             .await
             .amount_liquidity_borrowed,
+        borrow_ammount
+    );
+
+    assert_eq!(
+        liquidity_info.get_data(&mut context).await.amount_borrowed,
         borrow_ammount
     );
 
@@ -287,7 +292,7 @@ async fn liquidity_repay() {
         .await
         .unwrap();
 
-    let borrow_ammount = DEPOSIT_AMOUNT * collateral::RATIO_INITIAL / (100 * RATIO_POWER);
+    let borrow_ammount = DEPOSIT_AMOUNT * collateral::RATIO_INITIAL / RATIO_POWER;
     println!("Borrow amount: {}", borrow_ammount);
     obligation_info
         .liquidity_borrow(
@@ -303,6 +308,11 @@ async fn liquidity_repay() {
 
     assert_eq!(
         get_token_balance(&mut context, &borrower_liquidity.pubkey()).await,
+        borrow_ammount
+    );
+
+    assert_eq!(
+        liquidity_info.get_data(&mut context).await.amount_borrowed,
         borrow_ammount
     );
 
@@ -322,6 +332,11 @@ async fn liquidity_repay() {
             .get_data(&mut context)
             .await
             .amount_liquidity_borrowed,
+        0
+    );
+
+    assert_eq!(
+        liquidity_info.get_data(&mut context).await.amount_borrowed,
         0
     );
 

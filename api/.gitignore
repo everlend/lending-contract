@@ -1,0 +1,20 @@
+# Package manager
+.yarn/*
+!.yarn/patches
+!.yarn/releases
+!.yarn/plugins
+!.yarn/sdks
+!.yarn/versions
+.pnp.*
+
+# Dependencies
+node_modules/
+
+# ESLint
+.eslintcache
+
+# Build and test
+dist/
+build/
+coverage/
+target/

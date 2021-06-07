@@ -2,7 +2,7 @@
 
 mod utils;
 
-use everlend_lending::state::CollateralStatus;
+use everlend_lending::state::{CollateralStatus, RATIO_POWER};
 use solana_program_test::*;
 use utils::*;
 
@@ -31,7 +31,7 @@ async fn success() {
 
     let collateral = collateral_info.get_data(&mut context).await;
 
-    assert_eq!(collateral.status, CollateralStatus::InActive);
+    assert_eq!(collateral.status, CollateralStatus::Inactive);
     assert_eq!(collateral.ratio_initial, collateral::RATIO_INITIAL);
     assert_eq!(
         market_info.get_data(&mut context).await.collateral_tokens,
@@ -68,8 +68,8 @@ async fn update_token() {
         .await
         .unwrap();
 
-    const NEW_RATIO_INITIAL: u64 = 35 * u64::pow(10, 9);
-    const NEW_RATIO_HEALTHY: u64 = 60 * u64::pow(10, 9);
+    const NEW_RATIO_INITIAL: u64 = 35 * RATIO_POWER / 100;
+    const NEW_RATIO_HEALTHY: u64 = 60 * RATIO_POWER / 100;
 
     collateral_info
         .update(

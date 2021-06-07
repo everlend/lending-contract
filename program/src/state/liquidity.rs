@@ -5,6 +5,7 @@ use crate::error::LendingError;
 use super::*;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use solana_program::{
+    entrypoint::ProgramResult,
     msg,
     program_error::ProgramError,
     program_pack::{IsInitialized, Pack, Sealed},
@@ -16,16 +17,16 @@ use solana_program::{
 #[derive(Clone, Copy, Debug, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
 pub enum LiquidityStatus {
     /// Inactive and invisible
-    InActive = 0,
+    Inactive = 0,
     /// Active
     Active = 1,
     /// Inactive but visible
-    InActiveAndVisible = 2,
+    InactiveAndVisible = 2,
 }
 
 impl Default for LiquidityStatus {
     fn default() -> Self {
-        LiquidityStatus::InActive
+        LiquidityStatus::Inactive
     }
 }
 
@@ -45,17 +46,37 @@ pub struct Liquidity {
     pub token_account: Pubkey,
     /// Token that lenders will receive
     pub pool_mint: Pubkey,
+    /// Amount borrowed from the liquidity pool
+    pub amount_borrowed: u64,
 }
 
 impl Liquidity {
     /// Initialize a collateral
     pub fn init(&mut self, params: InitLiquidityParams) {
         self.version = PROGRAM_VERSION;
-        self.status = LiquidityStatus::InActive;
+        self.status = LiquidityStatus::Inactive;
         self.market = params.market;
         self.token_mint = params.token_mint;
         self.token_account = params.token_account;
         self.pool_mint = params.pool_mint;
+    }
+
+    /// Borrow funds
+    pub fn borrow(&mut self, amount: u64) -> ProgramResult {
+        self.amount_borrowed = self
+            .amount_borrowed
+            .checked_add(amount)
+            .ok_or(LendingError::CalculationFailure)?;
+        Ok(())
+    }
+
+    /// Repay funds
+    pub fn repay(&mut self, amount: u64) -> ProgramResult {
+        self.amount_borrowed = self
+            .amount_borrowed
+            .checked_sub(amount)
+            .ok_or(LendingError::CalculationFailure)?;
+        Ok(())
     }
 
     /// Deposit exchange amount
@@ -68,11 +89,14 @@ impl Liquidity {
         let result = if pool_mint_supply == 0 || token_account_amount == 0 {
             amount
         } else {
-            amount
-                .checked_mul(pool_mint_supply)
+            let total_amount = token_account_amount
+                .checked_add(self.amount_borrowed)
+                .ok_or(LendingError::CalculationFailure)?;
+            (amount as u128)
+                .checked_mul(pool_mint_supply as u128)
                 .ok_or(LendingError::CalculationFailure)?
-                .checked_div(token_account_amount)
-                .ok_or(LendingError::CalculationFailure)?
+                .checked_div(total_amount as u128)
+                .ok_or(LendingError::CalculationFailure)? as u64
         };
 
         Ok(result)
@@ -88,11 +112,14 @@ impl Liquidity {
         let result = if pool_mint_supply == 0 || token_account_amount == 0 {
             amount
         } else {
-            amount
-                .checked_mul(token_account_amount)
+            let total_amount = token_account_amount
+                .checked_add(self.amount_borrowed)
+                .ok_or(LendingError::CalculationFailure)?;
+            (amount as u128)
+                .checked_mul(total_amount as u128)
                 .ok_or(LendingError::CalculationFailure)?
-                .checked_div(pool_mint_supply)
-                .ok_or(LendingError::CalculationFailure)?
+                .checked_div(pool_mint_supply as u128)
+                .ok_or(LendingError::CalculationFailure)? as u64
         };
 
         Ok(result)
@@ -113,8 +140,8 @@ pub struct InitLiquidityParams {
 
 impl Sealed for Liquidity {}
 impl Pack for Liquidity {
-    // 1 + 1 + 32 + 32 + 32 + 32
-    const LEN: usize = 130;
+    // 1 + 1 + 32 + 32 + 32 + 32 + 8
+    const LEN: usize = 138;
 
     fn pack_into_slice(&self, dst: &mut [u8]) {
         let mut slice = dst;

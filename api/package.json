@@ -1,0 +1,46 @@
+{
+  "name": "@everlend/api",
+  "version": "0.1.8",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "repository": {
+    "url": "git@github.com:everlend/lending-contract.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/",
+    "access": "public"
+  },
+  "scripts": {
+    "build": "rimraf dist && tsc -p ./tsconfig.build.json",
+    "clean": "yarn cache clean && rm -rf node_modules",
+    "test": "jest",
+    "test:watch": "jest --watch"
+  },
+  "devDependencies": {
+    "@types/jest": "^26.0.23",
+    "@typescript-eslint/eslint-plugin": "^4.24.0",
+    "@typescript-eslint/parser": "^4.24.0",
+    "eslint": "^7.26.0",
+    "eslint-config-prettier": "^8.3.0",
+    "eslint-plugin-prettier": "^3.4.0",
+    "eslint-plugin-react": "^7.23.2",
+    "jest": "^27.0.3",
+    "prettier": "^2.3.0",
+    "rimraf": "^3.0.2",
+    "ts-jest": "^27.0.2",
+    "ts-node": "^10.0.0",
+    "typescript": "^4.3.2"
+  },
+  "commitlint": {
+    "extends": [
+      "@commitlint/config-conventional"
+    ]
+  },
+  "dependencies": {
+    "@solana/spl-token": "^0.1.5",
+    "@solana/web3.js": "^1.16.1",
+    "buffer": "^6.0.3",
+    "buffer-layout": "^1.2.1"
+  }
+}

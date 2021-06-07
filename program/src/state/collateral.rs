@@ -1,7 +1,9 @@
 //! Program state definitions
 use super::*;
+use crate::error::LendingError;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use solana_program::{
+    entrypoint::ProgramResult,
     msg,
     program_error::ProgramError,
     program_pack::{IsInitialized, Pack, Sealed},
@@ -13,16 +15,16 @@ use solana_program::{
 #[derive(Clone, Copy, Debug, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
 pub enum CollateralStatus {
     /// Inactive and invisible
-    InActive = 0,
+    Inactive = 0,
     /// Active
     Active = 1,
     /// Inactive but visible
-    InActiveAndVisible = 2,
+    InactiveAndVisible = 2,
 }
 
 impl Default for CollateralStatus {
     fn default() -> Self {
-        CollateralStatus::InActive
+        CollateralStatus::Inactive
     }
 }
 
@@ -50,12 +52,21 @@ impl Collateral {
     /// Initialize a collateral
     pub fn init(&mut self, params: InitCollateralParams) {
         self.version = PROGRAM_VERSION;
-        self.status = CollateralStatus::InActive;
+        self.status = CollateralStatus::Inactive;
         self.market = params.market;
         self.token_mint = params.token_mint;
         self.token_account = params.token_account;
         self.ratio_initial = params.ratio_initial;
         self.ratio_healthy = params.ratio_healthy;
+    }
+
+    /// Check health to be within the collateral limits
+    pub fn check_health(&self, health: u64) -> ProgramResult {
+        if health > self.ratio_initial {
+            Err(LendingError::CollateralHealthCheckFailed.into())
+        } else {
+            Ok(())
+        }
     }
 }
 
