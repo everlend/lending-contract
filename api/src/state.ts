@@ -36,10 +36,11 @@ export class Liquidity {
     public tokenMint: PublicKey,
     public tokenAccount: PublicKey,
     public poolMint: PublicKey,
+    public amountBorrowed: u64,
   ) {}
 
   static from(buffer: Buffer): Liquidity {
-    const { version, status, market, token_mint, token_account, pool_mint } =
+    const { version, status, market, token_mint, token_account, pool_mint, amount_borrowed } =
       LiquidityLayout.decode(buffer)
 
     return {
@@ -49,6 +50,7 @@ export class Liquidity {
       tokenMint: new PublicKey(token_mint),
       tokenAccount: new PublicKey(token_account),
       poolMint: new PublicKey(pool_mint),
+      amountBorrowed: u64.fromBuffer(amount_borrowed),
     }
   }
 }
