@@ -163,7 +163,7 @@ describe('LendingMarket', () => {
         borrower,
       )
 
-      const obligation = await lendingMarket.getObligationnfo(obligationPubkey)
+      const obligation = await lendingMarket.getObligationInfo(obligationPubkey)
       expect(obligation.owner.toString()).toEqual(borrower.publicKey.toString())
     })
   })

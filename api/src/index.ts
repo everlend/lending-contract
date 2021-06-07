@@ -108,7 +108,7 @@ export class LendingMarket {
     return collateral
   }
 
-  async getObligationnfo(obligatioPubkey: PublicKey) {
+  async getObligationInfo(obligatioPubkey: PublicKey) {
     const info = await this.getOwnedAccountInfo(obligatioPubkey)
     if (info.data.length != ObligationLayout.span) {
       throw new Error(`Invalid obligation size`)
