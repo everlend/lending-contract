@@ -190,6 +190,7 @@ export class LendingMarket {
     uiAmount: number,
     source: PublicKey,
     destination: PublicKey,
+    userTransferAuthority: PublicKey,
   ) {
     const liquidity = await this.getLiquidityInfo(liquidityPubkey)
 
@@ -210,7 +211,7 @@ export class LendingMarket {
         tokenAccount: liquidity.tokenAccount,
         poolMint: liquidity.poolMint,
         marketAuthority,
-        userTransferAuthority: this.payer.publicKey,
+        userTransferAuthority,
         amount,
       }),
     )
@@ -232,9 +233,13 @@ export class LendingMarket {
     source: PublicKey,
     destination: PublicKey,
   ) {
-    const tx = await this.liquidityDepositTx(liquidityPubkey, uiAmount, source, destination)
-
-    console.log(this.payer)
+    const tx = await this.liquidityDepositTx(
+      liquidityPubkey,
+      uiAmount,
+      source,
+      destination,
+      this.payer.publicKey,
+    )
 
     const signature = await sendAndConfirmTransaction(this.connection, tx, [this.payer])
     console.log(`Signature: ${signature}`)
@@ -245,6 +250,7 @@ export class LendingMarket {
     uiAmount: number,
     source: PublicKey,
     destination: PublicKey,
+    userTransferAuthority: PublicKey,
   ) {
     const liquidity = await this.getLiquidityInfo(liquidityPubkey)
 
@@ -265,7 +271,7 @@ export class LendingMarket {
         tokenAccount: liquidity.tokenAccount,
         poolMint: liquidity.poolMint,
         marketAuthority,
-        userTransferAuthority: this.payer.publicKey,
+        userTransferAuthority,
         amount,
       }),
     )
@@ -287,7 +293,13 @@ export class LendingMarket {
     source: PublicKey,
     destination: PublicKey,
   ) {
-    const tx = await this.liquidityWithdrawTx(liquidityPubkey, uiAmount, source, destination)
+    const tx = await this.liquidityWithdrawTx(
+      liquidityPubkey,
+      uiAmount,
+      source,
+      destination,
+      this.payer.publicKey,
+    )
 
     const signature = await sendAndConfirmTransaction(this.connection, tx, [this.payer])
     console.log(`Signature: ${signature}`)
@@ -296,10 +308,11 @@ export class LendingMarket {
   async createObligationTx(
     liquidityPubkey: PublicKey,
     collateralPubkey: PublicKey,
+    owner: PublicKey,
   ): Promise<{ tx: Transaction; pubkey: PublicKey }> {
     const [obligationAuthority] = await PublicKey.findProgramAddress(
       [
-        this.payer.publicKey.toBuffer(),
+        owner.toBuffer(),
         this.pubkey.toBuffer(),
         liquidityPubkey.toBuffer(),
         collateralPubkey.toBuffer(),
@@ -321,7 +334,7 @@ export class LendingMarket {
         liquidity: liquidityPubkey,
         collateral: collateralPubkey,
         obligationAuthority,
-        owner: this.payer.publicKey,
+        owner,
       }),
     )
 
@@ -332,7 +345,11 @@ export class LendingMarket {
     liquidityPubkey: PublicKey,
     collateralPubkey: PublicKey,
   ): Promise<PublicKey> {
-    const { tx, pubkey } = await this.createObligationTx(liquidityPubkey, collateralPubkey)
+    const { tx, pubkey } = await this.createObligationTx(
+      liquidityPubkey,
+      collateralPubkey,
+      this.payer.publicKey,
+    )
 
     const signature = await sendAndConfirmTransaction(this.connection, tx, [this.payer])
     console.log(`Signature: ${signature}`)
