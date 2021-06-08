@@ -8,7 +8,6 @@
     "url": "git@github.com:everlend/lending-contract.git"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com/",
     "access": "public"
   },
   "scripts": {
