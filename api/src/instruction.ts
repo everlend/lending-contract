@@ -132,3 +132,164 @@ export const createObligation = ({
     data,
   })
 }
+
+export type ObligationCollateralDepositParams = BaseInstructionParams & {
+  market: PublicKey
+  obligation: PublicKey
+  collateral: PublicKey
+  source: PublicKey
+  collateralTokenAccount: PublicKey
+  userTransferAuthority: PublicKey
+  amount: u64
+}
+export const obligationCollateralDeposit = ({
+  programId,
+  market,
+  obligation,
+  collateral,
+  source,
+  collateralTokenAccount,
+  userTransferAuthority,
+  amount,
+}: ObligationCollateralDepositParams) => {
+  const data = encodeData(MarketInsructionLayouts.ObligationCollateralDeposit, {
+    amount: new u64(amount).toBuffer(),
+  })
+
+  return new TransactionInstruction({
+    keys: [
+      { pubkey: obligation, isSigner: false, isWritable: true },
+      { pubkey: collateral, isSigner: false, isWritable: false },
+      { pubkey: source, isSigner: false, isWritable: true },
+      { pubkey: collateralTokenAccount, isSigner: false, isWritable: true },
+      { pubkey: market, isSigner: false, isWritable: false },
+      { pubkey: userTransferAuthority, isSigner: true, isWritable: false },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+    programId: new PublicKey(programId),
+    data,
+  })
+}
+
+export type ObligationCollateralWithdrawParams = BaseInstructionParams & {
+  market: PublicKey
+  obligation: PublicKey
+  collateral: PublicKey
+  destination: PublicKey
+  collateralTokenAccount: PublicKey
+  obligationOwner: PublicKey
+  marketAuthority: PublicKey
+  amount: u64
+}
+export const obligationCollateralWithdraw = ({
+  programId,
+  market,
+  obligation,
+  collateral,
+  destination,
+  collateralTokenAccount,
+  obligationOwner,
+  marketAuthority,
+  amount,
+}: ObligationCollateralWithdrawParams) => {
+  const data = encodeData(MarketInsructionLayouts.ObligationCollateralWithdraw, {
+    amount: new u64(amount).toBuffer(),
+  })
+
+  return new TransactionInstruction({
+    keys: [
+      { pubkey: obligation, isSigner: false, isWritable: true },
+      { pubkey: collateral, isSigner: false, isWritable: false },
+      { pubkey: destination, isSigner: false, isWritable: true },
+      { pubkey: collateralTokenAccount, isSigner: false, isWritable: true },
+      { pubkey: market, isSigner: false, isWritable: false },
+      { pubkey: obligationOwner, isSigner: true, isWritable: false },
+      { pubkey: marketAuthority, isSigner: false, isWritable: false },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+    programId: new PublicKey(programId),
+    data,
+  })
+}
+
+export type ObligationLiquidityBorrowParams = BaseInstructionParams & {
+  market: PublicKey
+  obligation: PublicKey
+  liquidity: PublicKey
+  collateral: PublicKey
+  destination: PublicKey
+  liquidityTokenAccount: PublicKey
+  obligationOwner: PublicKey
+  marketAuthority: PublicKey
+  amount: u64
+}
+export const obligationLiquidityBorrow = ({
+  programId,
+  market,
+  obligation,
+  liquidity,
+  collateral,
+  destination,
+  liquidityTokenAccount,
+  obligationOwner,
+  marketAuthority,
+  amount,
+}: ObligationLiquidityBorrowParams) => {
+  const data = encodeData(MarketInsructionLayouts.ObligationLiquidityBorrow, {
+    amount: new u64(amount).toBuffer(),
+  })
+
+  return new TransactionInstruction({
+    keys: [
+      { pubkey: obligation, isSigner: false, isWritable: true },
+      { pubkey: liquidity, isSigner: false, isWritable: true },
+      { pubkey: collateral, isSigner: false, isWritable: false },
+      { pubkey: destination, isSigner: false, isWritable: true },
+      { pubkey: liquidityTokenAccount, isSigner: false, isWritable: true },
+      { pubkey: market, isSigner: false, isWritable: false },
+      { pubkey: obligationOwner, isSigner: true, isWritable: false },
+      { pubkey: marketAuthority, isSigner: false, isWritable: false },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+    programId: new PublicKey(programId),
+    data,
+  })
+}
+
+export type ObligationLiquidityRepayParams = BaseInstructionParams & {
+  market: PublicKey
+  obligation: PublicKey
+  liquidity: PublicKey
+  source: PublicKey
+  liquidityTokenAccount: PublicKey
+  userTransferAuthority: PublicKey
+  amount: u64
+}
+export const obligationLiquidityRepay = ({
+  programId,
+  market,
+  obligation,
+  liquidity,
+  source,
+  liquidityTokenAccount,
+  userTransferAuthority,
+  amount,
+}: ObligationLiquidityRepayParams) => {
+  const data = encodeData(MarketInsructionLayouts.ObligationLiquidityRepay, {
+    amount: new u64(amount).toBuffer(),
+  })
+
+  return new TransactionInstruction({
+    keys: [
+      { pubkey: obligation, isSigner: false, isWritable: true },
+      { pubkey: liquidity, isSigner: false, isWritable: true },
+      { pubkey: source, isSigner: false, isWritable: true },
+      { pubkey: liquidityTokenAccount, isSigner: false, isWritable: true },
+      { pubkey: market, isSigner: false, isWritable: false },
+      { pubkey: userTransferAuthority, isSigner: true, isWritable: false },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+    programId: new PublicKey(programId),
+    data,
+  })
+}

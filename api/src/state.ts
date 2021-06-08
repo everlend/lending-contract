@@ -1,6 +1,6 @@
 import { u64 } from '@solana/spl-token'
 import { PublicKey } from '@solana/web3.js'
-import { CollateralLayout, LiquidityLayout, MarketLayout } from './layout'
+import { CollateralLayout, LiquidityLayout, MarketLayout, ObligationLayout } from './layout'
 
 export class Market {
   constructor(
@@ -36,10 +36,11 @@ export class Liquidity {
     public tokenMint: PublicKey,
     public tokenAccount: PublicKey,
     public poolMint: PublicKey,
+    public amountBorrowed: u64,
   ) {}
 
   static from(buffer: Buffer): Liquidity {
-    const { version, status, market, token_mint, token_account, pool_mint } =
+    const { version, status, market, token_mint, token_account, pool_mint, amount_borrowed } =
       LiquidityLayout.decode(buffer)
 
     return {
@@ -49,6 +50,7 @@ export class Liquidity {
       tokenMint: new PublicKey(token_mint),
       tokenAccount: new PublicKey(token_account),
       poolMint: new PublicKey(pool_mint),
+      amountBorrowed: u64.fromBuffer(amount_borrowed),
     }
   }
 }
@@ -82,6 +84,40 @@ export class Collateral {
       tokenAccount: new PublicKey(token_account),
       ratioInitial: u64.fromBuffer(ratio_initial),
       ratioHealthy: u64.fromBuffer(ratio_healthy),
+    }
+  }
+}
+
+export class Obligation {
+  constructor(
+    public version: number,
+    public market: PublicKey,
+    public owner: PublicKey,
+    public liquidity: PublicKey,
+    public collateral: PublicKey,
+    public amountLiquidityBorrowed: u64,
+    public amountCollateralDeposited: u64,
+  ) {}
+
+  static from(buffer: Buffer): Obligation {
+    const {
+      version,
+      market,
+      owner,
+      liquidity,
+      collateral,
+      amount_liquidity_borrowed,
+      amount_collateral_deposited,
+    } = ObligationLayout.decode(buffer)
+
+    return {
+      version,
+      market: new PublicKey(market),
+      owner: new PublicKey(owner),
+      liquidity: new PublicKey(liquidity),
+      collateral: new PublicKey(collateral),
+      amountLiquidityBorrowed: u64.fromBuffer(amount_liquidity_borrowed),
+      amountCollateralDeposited: u64.fromBuffer(amount_collateral_deposited),
     }
   }
 }

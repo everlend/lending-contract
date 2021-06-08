@@ -59,6 +59,7 @@ impl Liquidity {
         self.token_mint = params.token_mint;
         self.token_account = params.token_account;
         self.pool_mint = params.pool_mint;
+        self.amount_borrowed = 0;
     }
 
     /// Borrow funds

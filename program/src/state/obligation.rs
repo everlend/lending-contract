@@ -91,7 +91,7 @@ impl Obligation {
             .checked_mul(RATIO_POWER as u128)
             .ok_or(LendingError::CalculationFailure)?
             .checked_div(self.amount_collateral_deposited as u128)
-            .unwrap_or(0) as u64;
+            .ok_or(LendingError::CollateralHealthCheckFailed)? as u64;
 
         Ok(result)
     }

@@ -1,6 +1,6 @@
 {
   "name": "@everlend/api",
-  "version": "0.1.8",
+  "version": "0.2.2",
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -8,7 +8,6 @@
     "url": "git@github.com:everlend/lending-contract.git"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com/",
     "access": "public"
   },
   "scripts": {
