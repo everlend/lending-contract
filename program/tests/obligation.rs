@@ -2,9 +2,13 @@
 
 mod utils;
 
-use everlend_lending::state::{CollateralStatus, LiquidityStatus, PROGRAM_VERSION, RATIO_POWER};
+use everlend_lending::{
+    error::LendingError,
+    state::{CollateralStatus, LiquidityStatus, PROGRAM_VERSION, RATIO_POWER},
+};
+use solana_program::instruction::InstructionError;
 use solana_program_test::*;
-use solana_sdk::{signature::Keypair, signer::Signer};
+use solana_sdk::{signature::Keypair, signer::Signer, transaction::TransactionError};
 use utils::*;
 
 async fn setup() -> (
@@ -205,6 +209,38 @@ async fn collateral_withdraw() {
         get_token_balance(&mut context, &borrower_collateral.pubkey()).await,
         WITHDRAW_AMOUNT
     );
+}
+
+#[tokio::test]
+async fn fail_collateral_withdraw_without_deposit() {
+    let (mut context, market_info, liquidity_info, collateral_info) = setup().await;
+    let (obligation_info, borrower_collateral, _) = prepare_borrower(
+        &mut context,
+        &market_info,
+        &liquidity_info,
+        &collateral_info,
+        10000,
+    )
+    .await;
+
+    const WITHDRAW_AMOUNT: u64 = 10000;
+    assert_eq!(
+        obligation_info
+            .collateral_withdraw(
+                &mut context,
+                &market_info,
+                &collateral_info,
+                WITHDRAW_AMOUNT,
+                &borrower_collateral.pubkey(),
+            )
+            .await
+            .unwrap_err()
+            .unwrap(),
+        TransactionError::InstructionError(
+            0,
+            InstructionError::Custom(LendingError::CalculationFailure as u32)
+        )
+    )
 }
 
 #[tokio::test]

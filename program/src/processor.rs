@@ -712,10 +712,10 @@ impl Processor {
             return Err(ProgramError::InvalidArgument);
         }
 
-        // Check obligation health
-        collateral.check_health(obligation.calc_health()?)?;
-
         obligation.collateral_withdraw(amount)?;
+
+        // Check obligation health
+        collateral.check_ratio(obligation.calc_ratio()?)?;
 
         Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
 
@@ -813,7 +813,7 @@ impl Processor {
         liquidity.borrow(amount)?;
 
         // Check obligation health
-        collateral.check_health(obligation.calc_health()?)?;
+        collateral.check_ratio(obligation.calc_ratio()?)?;
 
         Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
         Liquidity::pack(liquidity, *liquidity_info.data.borrow_mut())?;

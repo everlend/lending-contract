@@ -63,10 +63,10 @@ impl Collateral {
         self.oracle = params.oracle;
     }
 
-    /// Check health to be within the collateral limits
-    pub fn check_health(&self, health: u64) -> ProgramResult {
-        if health > self.ratio_initial {
-            Err(LendingError::CollateralHealthCheckFailed.into())
+    /// Check ratio to be within the collateral limits
+    pub fn check_ratio(&self, ratio: u64) -> ProgramResult {
+        if ratio > self.ratio_initial {
+            Err(LendingError::CollateralRatioCheckFailed.into())
         } else {
             Ok(())
         }

@@ -17,9 +17,9 @@ pub enum LendingError {
     /// The calculation failed.
     #[error("Calculation failure")]
     CalculationFailure,
-    /// Collateral health check failed, returned if user borrows too much or withdraws too much collateral.
-    #[error("Collateral health check failed")]
-    CollateralHealthCheckFailed,
+    /// Collateral ratio check failed, returned if user borrows too much or withdraws too much collateral.
+    #[error("Collateral ratio check failed")]
+    CollateralRatioCheckFailed,
     /// Invalid oracle config
     #[error("Invalid oracle config")]
     InvalidOracleConfig,
