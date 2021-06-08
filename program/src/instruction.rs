@@ -36,6 +36,7 @@ pub enum LendingInstruction {
     /// [R] Rent sysvar
     /// [R] Sytem program
     /// [R] Token program id
+    /// [R] Oracle state account pubkey - optional
     CreateLiquidityToken,
 
     /// Update liquidity token
@@ -61,6 +62,7 @@ pub enum LendingInstruction {
     /// [R] Rent sysvar
     /// [R] Sytem program
     /// [R] Token program id
+    /// [R] Oracle state account pubkey - optional
     CreateCollateralToken {
         /// Fractional initial collateralization ratio (multiplied by 10e9)
         ratio_initial: u64,
@@ -226,12 +228,13 @@ pub fn create_liquidity_token(
     pool_mint: &Pubkey,
     market: &Pubkey,
     market_owner: &Pubkey,
+    liquidity_oracle: &Option<Pubkey>,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LendingInstruction::CreateLiquidityToken;
     let data = init_data.try_to_vec()?;
     let (market_authority, _) = find_program_address(program_id, market);
 
-    let accounts = vec![
+    let mut accounts = vec![
         AccountMeta::new(*liquidity, false),
         AccountMeta::new_readonly(*token_mint, false),
         AccountMeta::new(*token_account, false),
@@ -243,6 +246,9 @@ pub fn create_liquidity_token(
         AccountMeta::new_readonly(system_program::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
     ];
+    if let Some(liquidity_oracle) = liquidity_oracle {
+        accounts.push(AccountMeta::new_readonly(*liquidity_oracle, false));
+    }
 
     Ok(Instruction {
         program_id: *program_id,
@@ -286,6 +292,7 @@ pub fn create_collateral_token(
     token_account: &Pubkey,
     market: &Pubkey,
     market_owner: &Pubkey,
+    collateral_oracle: &Option<Pubkey>,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LendingInstruction::CreateCollateralToken {
         ratio_initial,
@@ -294,7 +301,7 @@ pub fn create_collateral_token(
     let data = init_data.try_to_vec()?;
     let (market_authority, _) = find_program_address(program_id, market);
 
-    let accounts = vec![
+    let mut accounts = vec![
         AccountMeta::new(*collateral, false),
         AccountMeta::new_readonly(*token_mint, false),
         AccountMeta::new(*token_account, false),
@@ -305,6 +312,9 @@ pub fn create_collateral_token(
         AccountMeta::new_readonly(system_program::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
     ];
+    if let Some(collateral_oracle) = collateral_oracle {
+        accounts.push(AccountMeta::new_readonly(*collateral_oracle, false));
+    }
 
     Ok(Instruction {
         program_id: *program_id,

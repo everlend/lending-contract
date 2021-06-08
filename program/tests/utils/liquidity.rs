@@ -17,10 +17,11 @@ pub struct LiquidityInfo {
     pub token_mint: Keypair,
     pub token_account: Keypair,
     pub pool_mint: Keypair,
+    pub oracle_pubkey: Option<Pubkey>,
 }
 
 impl LiquidityInfo {
-    pub fn new(seed: &str, market_info: &MarketInfo) -> Self {
+    pub fn new(seed: &str, market_info: &MarketInfo, oracle_pubkey: Option<Pubkey>) -> Self {
         let (market_authority, _) =
             find_program_address(&everlend_lending::id(), &market_info.market.pubkey());
 
@@ -29,6 +30,7 @@ impl LiquidityInfo {
             token_mint: Keypair::new(),
             token_account: Keypair::new(),
             pool_mint: Keypair::new(),
+            oracle_pubkey,
         }
     }
 
@@ -74,6 +76,7 @@ impl LiquidityInfo {
                     &self.pool_mint.pubkey(),
                     &market_info.market.pubkey(),
                     &market_info.owner.pubkey(),
+                    &self.oracle_pubkey,
                 )
                 .unwrap(),
             ],

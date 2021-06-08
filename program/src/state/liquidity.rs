@@ -48,6 +48,8 @@ pub struct Liquidity {
     pub pool_mint: Pubkey,
     /// Amount borrowed from the liquidity pool
     pub amount_borrowed: u64,
+    /// Oracle state account pubkey - optional
+    pub oracle: Option<Pubkey>,
 }
 
 impl Liquidity {
@@ -60,6 +62,7 @@ impl Liquidity {
         self.token_account = params.token_account;
         self.pool_mint = params.pool_mint;
         self.amount_borrowed = 0;
+        self.oracle = params.oracle;
     }
 
     /// Borrow funds
@@ -137,12 +140,14 @@ pub struct InitLiquidityParams {
     pub token_account: Pubkey,
     /// Token that lenders will receive
     pub pool_mint: Pubkey,
+    /// Oracle state account pubkey - optional
+    pub oracle: Option<Pubkey>,
 }
 
 impl Sealed for Liquidity {}
 impl Pack for Liquidity {
-    // 1 + 1 + 32 + 32 + 32 + 32 + 8
-    const LEN: usize = 138;
+    // 1 + 1 + 32 + 32 + 32 + 32 + 8 + (1 + 32)
+    const LEN: usize = 171;
 
     fn pack_into_slice(&self, dst: &mut [u8]) {
         let mut slice = dst;
@@ -150,7 +155,9 @@ impl Pack for Liquidity {
     }
 
     fn unpack_from_slice(src: &[u8]) -> Result<Self, solana_program::program_error::ProgramError> {
-        Self::try_from_slice(src).map_err(|_| {
+        let mut src_mut = src;
+        Self::deserialize(&mut src_mut).map_err(|err| {
+            msg!("{:?}", err);
             msg!("Failed to deserialize");
             ProgramError::InvalidAccountData
         })

@@ -3,6 +3,7 @@
 use crate::{error::LendingError, instruction::LendingInstruction};
 use crate::{find_obligation_authority, find_program_address, state::*};
 use borsh::BorshDeserialize;
+use flux_aggregator::{borsh_state::InitBorshState, state::Aggregator};
 use solana_program::program_pack::IsInitialized;
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
@@ -107,6 +108,22 @@ impl Processor {
 
         let token_mint = Mint::unpack(&token_mint_info.data.borrow())?;
 
+        // Optional oracle
+        let liquidity_oracle_pubkey = if let Ok(liquidity_oracle_info) =
+            next_account_info(account_info_iter)
+        {
+            assert_rent_exempt(rent, liquidity_oracle_info)?;
+            let aggregator = Aggregator::load_initialized(liquidity_oracle_info)?;
+            if aggregator.config.decimals != token_mint.decimals {
+                msg!("Token mint decimals does not match the aggregator config decimals provided");
+                return Err(LendingError::InvalidOracleConfig.into());
+            }
+
+            Some(*liquidity_oracle_info.key)
+        } else {
+            None
+        };
+
         // Initialize token account for spl token
         spl_initialize_account(
             token_account_info.clone(),
@@ -129,6 +146,7 @@ impl Processor {
             token_mint: *token_mint_info.key,
             token_account: *token_account_info.key,
             pool_mint: *pool_mint_info.key,
+            oracle: liquidity_oracle_pubkey,
         });
         market.increase_liquidity_tokens();
 
@@ -233,6 +251,24 @@ impl Processor {
         let mut collateral = Collateral::unpack_unchecked(&collateral_info.data.borrow())?;
         assert_uninitialized(&collateral)?;
 
+        let token_mint = Mint::unpack(&token_mint_info.data.borrow())?;
+
+        // Optional oracle
+        let collateral_oracle_pubkey = if let Ok(collateral_oracle_info) =
+            next_account_info(account_info_iter)
+        {
+            assert_rent_exempt(rent, collateral_oracle_info)?;
+            let aggregator = Aggregator::load_initialized(collateral_oracle_info)?;
+            if aggregator.config.decimals != token_mint.decimals {
+                msg!("Token mint decimals does not match the aggregator config decimals provided");
+                return Err(LendingError::InvalidOracleConfig.into());
+            }
+
+            Some(*collateral_oracle_info.key)
+        } else {
+            None
+        };
+
         // Initialize token account for spl token
         spl_initialize_account(
             token_account_info.clone(),
@@ -248,6 +284,7 @@ impl Processor {
             token_account: *token_account_info.key,
             ratio_initial,
             ratio_healthy,
+            oracle: collateral_oracle_pubkey,
         });
         market.increase_collateral_tokens();
 
@@ -675,10 +712,10 @@ impl Processor {
             return Err(ProgramError::InvalidArgument);
         }
 
-        obligation.collateral_withdraw(amount)?;
-        
         // Check obligation health
         collateral.check_health(obligation.calc_health()?)?;
+
+        obligation.collateral_withdraw(amount)?;
 
         Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
 

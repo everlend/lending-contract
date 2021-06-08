@@ -20,6 +20,9 @@ pub enum LendingError {
     /// Collateral health check failed, returned if user borrows too much or withdraws too much collateral.
     #[error("Collateral health check failed")]
     CollateralHealthCheckFailed,
+    /// Invalid oracle config
+    #[error("Invalid oracle config")]
+    InvalidOracleConfig,
 }
 
 impl PrintProgramError for LendingError {

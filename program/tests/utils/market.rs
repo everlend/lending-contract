@@ -56,7 +56,7 @@ impl MarketInfo {
     ) -> transport::Result<LiquidityInfo> {
         let liquidity_tokens = self.get_data(context).await.liquidity_tokens;
         let seed = format!("liquidity{:?}", liquidity_tokens);
-        let liquidity_info = LiquidityInfo::new(&seed, &self);
+        let liquidity_info = LiquidityInfo::new(&seed, &self, None);
 
         create_mint(context, &liquidity_info.token_mint, &self.owner.pubkey())
             .await
@@ -73,7 +73,7 @@ impl MarketInfo {
     ) -> transport::Result<CollateralInfo> {
         let collateral_tokens = self.get_data(context).await.collateral_tokens;
         let seed = format!("collateral{:?}", collateral_tokens);
-        let collateral_info = CollateralInfo::new(&seed, self);
+        let collateral_info = CollateralInfo::new(&seed, self, None);
 
         create_mint(context, &collateral_info.token_mint, &self.owner.pubkey())
             .await

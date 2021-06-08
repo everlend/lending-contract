@@ -19,10 +19,11 @@ pub struct CollateralInfo {
     pub collateral_pubkey: Pubkey,
     pub token_mint: Keypair,
     pub token_account: Keypair,
+    pub oracle_pubkey: Option<Pubkey>,
 }
 
 impl CollateralInfo {
-    pub fn new(seed: &str, market_info: &MarketInfo) -> Self {
+    pub fn new(seed: &str, market_info: &MarketInfo, oracle_pubkey: Option<Pubkey>) -> Self {
         let (market_authority, _) =
             find_program_address(&everlend_lending::id(), &market_info.market.pubkey());
 
@@ -30,6 +31,7 @@ impl CollateralInfo {
             collateral_pubkey: Pubkey::create_with_seed(&market_authority, seed, &id()).unwrap(),
             token_mint: Keypair::new(),
             token_account: Keypair::new(),
+            oracle_pubkey,
         }
     }
 
@@ -69,6 +71,7 @@ impl CollateralInfo {
                     &self.token_account.pubkey(),
                     &market_info.market.pubkey(),
                     &market_info.owner.pubkey(),
+                    &self.oracle_pubkey,
                 )
                 .unwrap(),
             ],
