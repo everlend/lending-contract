@@ -111,20 +111,26 @@ impl ObligationInfo {
         &self,
         context: &mut ProgramTestContext,
         market_info: &MarketInfo,
+        liquidity_info: &LiquidityInfo,
         collateral_info: &CollateralInfo,
         amount: u64,
         destination: &Pubkey,
+        liquidity_oracle: &Option<Pubkey>,
+        collateral_oracle: &Option<Pubkey>,
     ) -> transport::Result<()> {
         let tx = Transaction::new_signed_with_payer(
             &[instruction::obligation_collateral_withdraw(
                 &id(),
                 amount,
                 &self.obligation_pubkey,
+                &liquidity_info.liquidity_pubkey,
                 &collateral_info.collateral_pubkey,
                 destination,
                 &collateral_info.token_account.pubkey(),
                 &market_info.market.pubkey(),
                 &self.owner.pubkey(),
+                liquidity_oracle,
+                collateral_oracle,
             )
             .unwrap()],
             Some(&context.payer.pubkey()),

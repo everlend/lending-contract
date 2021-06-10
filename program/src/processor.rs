@@ -3,6 +3,7 @@
 use crate::{error::LendingError, instruction::LendingInstruction};
 use crate::{find_obligation_authority, find_program_address, state::*};
 use borsh::BorshDeserialize;
+use flux_aggregator::read_median;
 use flux_aggregator::{borsh_state::InitBorshState, state::Aggregator};
 use solana_program::program_pack::IsInitialized;
 use solana_program::{
@@ -659,6 +660,7 @@ impl Processor {
     ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let obligation_info = next_account_info(account_info_iter)?;
+        let liquidity_info = next_account_info(account_info_iter)?;
         let collateral_info = next_account_info(account_info_iter)?;
         let destination_info = next_account_info(account_info_iter)?;
         let collateral_token_account_info = next_account_info(account_info_iter)?;
@@ -704,6 +706,9 @@ impl Processor {
             return Err(ProgramError::InvalidArgument);
         }
 
+        // Get liquidity state
+        let liquidity = Liquidity::unpack(&liquidity_info.data.borrow())?;
+
         // Get collateral state
         let collateral = Collateral::unpack(&collateral_info.data.borrow())?;
 
@@ -712,10 +717,46 @@ impl Processor {
             return Err(ProgramError::InvalidArgument);
         }
 
+        // Process optional oracles for market price, else returns 1
+        let (liquidity_market_price, collateral_market_price) =
+            match (liquidity.oracle, collateral.oracle) {
+                (Some(liquidity_oracle), Some(collateral_oracle)) => {
+                    match (
+                        next_account_info(account_info_iter),
+                        next_account_info(account_info_iter),
+                    ) {
+                        (Ok(liquidity_oracle_info), Ok(collateral_oracle_info)) => {
+                            if liquidity_oracle != *liquidity_oracle_info.key {
+                                return Err(LendingError::InvalidOracle.into());
+                            }
+
+                            if collateral_oracle != *collateral_oracle_info.key {
+                                return Err(LendingError::InvalidOracle.into());
+                            }
+
+                            let liquidity_market_price = read_median(liquidity_oracle_info)?.median;
+                            let collateral_market_price =
+                                read_median(collateral_oracle_info)?.median;
+
+                            (liquidity_market_price, collateral_market_price)
+                        }
+                        _ => return Err(ProgramError::InvalidArgument),
+                    }
+                }
+                _ => (1u64, 1u64),
+            };
+
+        msg!(
+            "Market prices: {} {}",
+            liquidity_market_price,
+            collateral_market_price,
+        );
+
         obligation.collateral_withdraw(amount)?;
 
-        // Check obligation health
-        collateral.check_ratio(obligation.calc_ratio()?)?;
+        // Check obligation ratio
+        collateral
+            .check_ratio(obligation.calc_ratio(liquidity_market_price, collateral_market_price)?)?;
 
         Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
 
@@ -812,8 +853,8 @@ impl Processor {
         obligation.liquidity_borrow(amount)?;
         liquidity.borrow(amount)?;
 
-        // Check obligation health
-        collateral.check_ratio(obligation.calc_ratio()?)?;
+        // Check obligation ratio
+        collateral.check_ratio(obligation.calc_ratio(1, 1)?)?;
 
         Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
         Liquidity::pack(liquidity, *liquidity_info.data.borrow_mut())?;

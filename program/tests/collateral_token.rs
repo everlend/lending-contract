@@ -25,7 +25,7 @@ async fn success() {
     );
 
     let collateral_info = market_info
-        .create_collateral_token(&mut context)
+        .create_collateral_token(&mut context, None)
         .await
         .unwrap();
 
@@ -44,12 +44,12 @@ async fn two_tokens() {
     let (mut context, market_info) = setup().await;
 
     market_info
-        .create_collateral_token(&mut context)
+        .create_collateral_token(&mut context, None)
         .await
         .unwrap();
 
     market_info
-        .create_collateral_token(&mut context)
+        .create_collateral_token(&mut context, None)
         .await
         .unwrap();
 
@@ -64,7 +64,7 @@ async fn update_token() {
     let (mut context, market_info) = setup().await;
 
     let collateral_info = market_info
-        .create_collateral_token(&mut context)
+        .create_collateral_token(&mut context, None)
         .await
         .unwrap();
 

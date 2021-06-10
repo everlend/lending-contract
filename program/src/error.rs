@@ -20,6 +20,9 @@ pub enum LendingError {
     /// Collateral ratio check failed, returned if user borrows too much or withdraws too much collateral.
     #[error("Collateral ratio check failed")]
     CollateralRatioCheckFailed,
+    /// Invalid oracle
+    #[error("Invalid oracle")]
+    InvalidOracle,
     /// Invalid oracle config
     #[error("Invalid oracle config")]
     InvalidOracleConfig,

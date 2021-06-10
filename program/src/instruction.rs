@@ -152,6 +152,7 @@ pub enum LendingInstruction {
     ///
     /// Accounts:
     /// [W] Obligation account
+    /// [R] Liquidity account
     /// [R] Collateral account
     /// [W] Destination account (for collateral token mint)
     /// [W] Collateral token account
@@ -159,6 +160,8 @@ pub enum LendingInstruction {
     /// [RS] Obligation owner
     /// [R] Market authority
     /// [R] Token program id
+    /// [R] Liquidity oracle state account pubkey - optional
+    /// [R] Collateral oracle state account pubkey - optional
     ObligationCollateralWithdraw {
         /// Amount of collateral to withdraw
         amount: u64,
@@ -176,6 +179,8 @@ pub enum LendingInstruction {
     /// [RS] Obligation owner
     /// [R] Market authority
     /// [R] Token program id
+    /// [R] Liquidity oracle state account pubkey
+    /// [R] Collateral oracle state account pubkey
     ObligationLiquidityBorrow {
         /// Amount of liquidity to borrow
         amount: u64,
@@ -495,18 +500,22 @@ pub fn obligation_collateral_withdraw(
     program_id: &Pubkey,
     amount: u64,
     obligation: &Pubkey,
+    liquidity: &Pubkey,
     collateral: &Pubkey,
     destination: &Pubkey,
     collateral_token_account: &Pubkey,
     market: &Pubkey,
     obligation_owner: &Pubkey,
+    liquidity_oracle: &Option<Pubkey>,
+    collateral_oracle: &Option<Pubkey>,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LendingInstruction::ObligationCollateralWithdraw { amount };
     let data = init_data.try_to_vec()?;
     let (market_authority, _) = find_program_address(program_id, market);
 
-    let accounts = vec![
+    let mut accounts = vec![
         AccountMeta::new(*obligation, false),
+        AccountMeta::new_readonly(*liquidity, false),
         AccountMeta::new_readonly(*collateral, false),
         AccountMeta::new(*destination, false),
         AccountMeta::new(*collateral_token_account, false),
@@ -515,6 +524,13 @@ pub fn obligation_collateral_withdraw(
         AccountMeta::new_readonly(market_authority, false),
         AccountMeta::new_readonly(spl_token::id(), false),
     ];
+    match (liquidity_oracle, collateral_oracle) {
+        (Some(liquidity_oracle), Some(collateral_oracle)) => {
+            accounts.push(AccountMeta::new_readonly(*liquidity_oracle, false));
+            accounts.push(AccountMeta::new_readonly(*collateral_oracle, false));
+        }
+        _ => (),
+    }
 
     Ok(Instruction {
         program_id: *program_id,

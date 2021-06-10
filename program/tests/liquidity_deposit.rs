@@ -14,7 +14,7 @@ async fn setup() -> (ProgramTestContext, MarketInfo, LiquidityInfo) {
     market_info.init(&mut context).await.unwrap();
 
     let liquidity_info = market_info
-        .create_liquidity_token(&mut context)
+        .create_liquidity_token(&mut context, None)
         .await
         .unwrap();
 

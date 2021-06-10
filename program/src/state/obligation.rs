@@ -84,17 +84,28 @@ impl Obligation {
     }
 
     /// Calculate obligation ratio
-    pub fn calc_ratio(&self) -> Result<u64, ProgramError> {
+    pub fn calc_ratio(
+        &self,
+        liquidity_market_price: u64,
+        collateral_market_price: u64,
+    ) -> Result<u64, ProgramError> {
         // TODO: Add oracle interface here to calculate collateral and borrowed liquidity value.
         // For now we assume that collateral and liquidity tokens have 1:1 value ratio
         let result = if self.amount_liquidity_borrowed == 0 && self.amount_collateral_deposited == 0
         {
             0
         } else {
-            (self.amount_liquidity_borrowed as u128)
+            let liquidity_value = (self.amount_liquidity_borrowed as u128)
+                .checked_mul(liquidity_market_price as u128)
+                .ok_or(LendingError::CalculationFailure)?;
+            let collateral_value = (self.amount_collateral_deposited as u128)
+                .checked_mul(collateral_market_price as u128)
+                .ok_or(LendingError::CalculationFailure)?;
+
+            liquidity_value
                 .checked_mul(RATIO_POWER as u128)
                 .ok_or(LendingError::CalculationFailure)?
-                .checked_div(self.amount_collateral_deposited as u128)
+                .checked_div(collateral_value)
                 .ok_or(LendingError::CollateralRatioCheckFailed)? as u64
         };
 

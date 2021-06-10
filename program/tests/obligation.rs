@@ -23,12 +23,12 @@ async fn setup() -> (
     market_info.init(&mut context).await.unwrap();
 
     let liquidity_info = market_info
-        .create_liquidity_token(&mut context)
+        .create_liquidity_token(&mut context, None)
         .await
         .unwrap();
 
     let collateral_info = market_info
-        .create_collateral_token(&mut context)
+        .create_collateral_token(&mut context, None)
         .await
         .unwrap();
 
@@ -198,9 +198,12 @@ async fn collateral_withdraw() {
         .collateral_withdraw(
             &mut context,
             &market_info,
+            &liquidity_info,
             &collateral_info,
             WITHDRAW_AMOUNT,
             &borrower_collateral.pubkey(),
+            &None,
+            &None,
         )
         .await
         .unwrap();
@@ -229,9 +232,12 @@ async fn fail_collateral_withdraw_without_deposit() {
             .collateral_withdraw(
                 &mut context,
                 &market_info,
+                &liquidity_info,
                 &collateral_info,
                 WITHDRAW_AMOUNT,
                 &borrower_collateral.pubkey(),
+                &None,
+                &None,
             )
             .await
             .unwrap_err()
