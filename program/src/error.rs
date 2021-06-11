@@ -20,6 +20,10 @@ pub enum LendingError {
     /// Collateral ratio check failed, returned if user borrows too much or withdraws too much collateral.
     #[error("Collateral ratio check failed")]
     CollateralRatioCheckFailed,
+    /// Collateral healthy check failed, returned if user try
+    /// liquidate obligation when ratio is less than healthy.
+    #[error("Collateral healthy check failed")]
+    CollateralHealthyCheckFailed,
     /// Invalid oracle
     #[error("Invalid oracle")]
     InvalidOracle,

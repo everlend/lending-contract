@@ -71,6 +71,15 @@ impl Collateral {
             Ok(())
         }
     }
+
+    /// Check healthy to liquidate
+    pub fn check_healthy(&self, ratio: u64) -> ProgramResult {
+        if ratio < self.ratio_healthy {
+            Err(LendingError::CollateralHealthyCheckFailed.into())
+        } else {
+            Ok(())
+        }
+    }
 }
 
 impl Sealed for Collateral {}

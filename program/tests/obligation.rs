@@ -116,6 +116,48 @@ async fn prepare_borrower(
     (obligation_info, borrower_collateral, borrower_liquidity)
 }
 
+async fn prepare_liquidator(
+    context: &mut ProgramTestContext,
+    market_info: &MarketInfo,
+    liquidity_info: &LiquidityInfo,
+    collateral_info: &CollateralInfo,
+    mint_amount: u64,
+) -> (Keypair, Keypair, Keypair) {
+    let liquidator = Keypair::new();
+    let liquidator_liquidity = Keypair::new();
+    let liquidator_collateral = Keypair::new();
+
+    create_token_account(
+        context,
+        &liquidator_liquidity,
+        &liquidity_info.token_mint.pubkey(),
+        &liquidator.pubkey(),
+    )
+    .await
+    .unwrap();
+
+    create_token_account(
+        context,
+        &liquidator_collateral,
+        &collateral_info.token_mint.pubkey(),
+        &liquidator.pubkey(),
+    )
+    .await
+    .unwrap();
+
+    mint_tokens(
+        context,
+        &liquidity_info.token_mint.pubkey(),
+        &liquidator_liquidity.pubkey(),
+        &market_info.owner,
+        mint_amount,
+    )
+    .await
+    .unwrap();
+
+    (liquidator, liquidator_liquidity, liquidator_collateral)
+}
+
 #[tokio::test]
 async fn success() {
     let (mut context, market_info, liquidity_info, collateral_info) = setup().await;
@@ -385,6 +427,95 @@ async fn liquidity_repay() {
     assert_eq!(
         get_token_balance(&mut context, &borrower_liquidity.pubkey()).await,
         0
+    );
+}
+
+#[tokio::test]
+async fn liquidate() {
+    let (mut context, market_info, liquidity_info, collateral_info) = setup().await;
+    let (obligation_info, borrower_collateral, borrower_liquidity) = prepare_borrower(
+        &mut context,
+        &market_info,
+        &liquidity_info,
+        &collateral_info,
+        99999,
+    )
+    .await;
+
+    // Deposit
+    const DEPOSIT_AMOUNT: u64 = 10000;
+    obligation_info
+        .collateral_deposit(
+            &mut context,
+            &market_info,
+            &collateral_info,
+            DEPOSIT_AMOUNT,
+            &borrower_collateral.pubkey(),
+        )
+        .await
+        .unwrap();
+
+    // Borrow
+    let borrow_ammount = DEPOSIT_AMOUNT * collateral::RATIO_INITIAL / RATIO_POWER;
+    obligation_info
+        .liquidity_borrow(
+            &mut context,
+            &market_info,
+            &liquidity_info,
+            &collateral_info,
+            borrow_ammount,
+            &borrower_liquidity.pubkey(),
+        )
+        .await
+        .unwrap();
+
+    // TODO: We gonna update ratio healthy for collateral token. Fix it to changing oracle market price.
+    const NEW_RATIO_INITIAL: u64 = 50 * RATIO_POWER / 100;
+    const NEW_RATIO_HEALTHY: u64 = 40 * RATIO_POWER / 100;
+    collateral_info
+        .update(
+            &mut context,
+            CollateralStatus::Active,
+            NEW_RATIO_INITIAL,
+            NEW_RATIO_HEALTHY,
+            &market_info,
+        )
+        .await
+        .unwrap();
+
+    let (liquidator, liquidator_liquidity, liquidator_collateral) = prepare_liquidator(
+        &mut context,
+        &market_info,
+        &liquidity_info,
+        &collateral_info,
+        99999,
+    )
+    .await;
+
+    obligation_info
+        .liquidate(
+            &mut context,
+            &market_info,
+            &liquidity_info,
+            &collateral_info,
+            &liquidator_liquidity.pubkey(),
+            &liquidator_collateral.pubkey(),
+            Some(&liquidator),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        obligation_info
+            .get_data(&mut context)
+            .await
+            .amount_liquidity_borrowed,
+        0
+    );
+
+    assert_eq!(
+        get_token_balance(&mut context, &liquidator_collateral.pubkey()).await,
+        10000
     );
 }
 

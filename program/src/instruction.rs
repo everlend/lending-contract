@@ -200,6 +200,24 @@ pub enum LendingInstruction {
         /// Amount of liquidity to repay
         amount: u64,
     },
+
+    /// Repay the debt of a failing position and take the collateral
+    ///
+    /// Accounts:
+    /// [W] Obligation account
+    /// [W] Source liquidator account (for liquidity token)
+    /// [W] Destination liquidator account (for collateral token)
+    /// [R] Liquidity account
+    /// [R] Collateral account
+    /// [W] Liquidity token account
+    /// [W] Collateral token account
+    /// [R] Market account
+    /// [RS] User transfer authority
+    /// [R] Market authority
+    /// [R] Token program id
+    /// [R] Liquidity oracle state account pubkey
+    /// [R] Collateral oracle state account pubkey
+    LiquidateObligation,
 }
 
 /// Create `InitMarket` instruction
@@ -567,6 +585,7 @@ pub fn obligation_liquidity_borrow(
         AccountMeta::new_readonly(market_authority, false),
         AccountMeta::new_readonly(spl_token::id(), false),
     ];
+    // TODO: add optional oracles
 
     Ok(Instruction {
         program_id: *program_id,
@@ -599,6 +618,54 @@ pub fn obligation_liquidity_repay(
         AccountMeta::new_readonly(*user_transfer_authority, true),
         AccountMeta::new_readonly(spl_token::id(), false),
     ];
+
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts,
+        data,
+    })
+}
+
+/// Create `LiquidateObligation` instruction
+#[allow(clippy::too_many_arguments)]
+pub fn liquidate_obligation(
+    program_id: &Pubkey,
+    obligation: &Pubkey,
+    source: &Pubkey,
+    destination: &Pubkey,
+    liquidity: &Pubkey,
+    collateral: &Pubkey,
+    liquidity_token_account: &Pubkey,
+    collateral_token_account: &Pubkey,
+    market: &Pubkey,
+    user_transfer_authority: &Pubkey,
+    liquidity_oracle: &Option<Pubkey>,
+    collateral_oracle: &Option<Pubkey>,
+) -> Result<Instruction, ProgramError> {
+    let init_data = LendingInstruction::LiquidateObligation;
+    let data = init_data.try_to_vec()?;
+    let (market_authority, _) = find_program_address(program_id, market);
+
+    let mut accounts = vec![
+        AccountMeta::new(*obligation, false),
+        AccountMeta::new(*source, false),
+        AccountMeta::new(*destination, false),
+        AccountMeta::new(*liquidity, false),
+        AccountMeta::new(*collateral, false),
+        AccountMeta::new(*liquidity_token_account, false),
+        AccountMeta::new(*collateral_token_account, false),
+        AccountMeta::new_readonly(*market, false),
+        AccountMeta::new_readonly(*user_transfer_authority, true),
+        AccountMeta::new_readonly(market_authority, false),
+        AccountMeta::new_readonly(spl_token::id(), false),
+    ];
+    match (liquidity_oracle, collateral_oracle) {
+        (Some(liquidity_oracle), Some(collateral_oracle)) => {
+            accounts.push(AccountMeta::new_readonly(*liquidity_oracle, false));
+            accounts.push(AccountMeta::new_readonly(*collateral_oracle, false));
+        }
+        _ => (),
+    }
 
     Ok(Instruction {
         program_id: *program_id,
