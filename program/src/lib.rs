@@ -15,7 +15,7 @@ pub mod entrypoint;
 pub use solana_program;
 use solana_program::pubkey::Pubkey;
 
-solana_program::declare_id!("69LK6qziCCnqgmUPYpuiJ2y8JavKVRrCZ4pDekSyDZTn");
+solana_program::declare_id!("CeGmkTwwswnRowjTFCMXf1Y5LaE3RqF6YqdmJfrQGRPb");
 
 /// Generates seed bump for authorities
 pub fn find_program_address(program_id: &Pubkey, pubkey: &Pubkey) -> (Pubkey, u8) {
