@@ -12,7 +12,7 @@ import { CollateralLayout, LiquidityLayout, MarketLayout, ObligationLayout } fro
 import { Collateral, Liquidity, Market, Obligation } from './state'
 import { createTokenAccountTx } from './transaction'
 
-export const PROGRAM_ID: PublicKey = new PublicKey('69LK6qziCCnqgmUPYpuiJ2y8JavKVRrCZ4pDekSyDZTn')
+export const PROGRAM_ID: PublicKey = new PublicKey('CeGmkTwwswnRowjTFCMXf1Y5LaE3RqF6YqdmJfrQGRPb')
 
 export * from './instruction'
 export * from './transaction'
@@ -131,11 +131,6 @@ export class LendingMarket {
     return info
   }
 
-  /**
-   * Generate liquidity accounts for source & destination
-   * @param liquidityPubkey Liquidity pubkey
-   * @returns [liquidity token account, pool account]
-   */
   async generateProviderAccounts(liquidityPubkey: PublicKey, payer = this.payer) {
     const liquidity = await this.getLiquidityInfo(liquidityPubkey)
     const rent = await Token.getMinBalanceRentForExemptAccount(this.connection)
@@ -168,12 +163,6 @@ export class LendingMarket {
     return [tokenAccount.publicKey, poolAccount.publicKey]
   }
 
-  /**
-   * Generate collateral accounts
-   * @param liquidityPubkey Liquidity Pubkey
-   * @param collateralPubkey Collateral Pubkey
-   * @returns [liquidity token account, collateral token account]
-   */
   async generateBorrowerAccounts(
     liquidityPubkey: PublicKey,
     collateralPubkey: PublicKey,
@@ -247,14 +236,6 @@ export class LendingMarket {
     return tx
   }
 
-  /**
-   * Transfer tokens to liquidity account and mint pool tokens
-   * @param liquidityPubkey Liquidity pubkey
-   * @param uiAmount Amount tokens to deposit
-   * @param source Source account of token mint
-   * @param destination Destination account of pool mint
-   * @param payer Signer for transfer tokens
-   */
   async liquidityDeposit(
     liquidityPubkey: PublicKey,
     uiAmount: number,
@@ -307,14 +288,6 @@ export class LendingMarket {
     return tx
   }
 
-  /**
-   * Burn pool tokens and transfer liquidity tokens
-   * @param liquidityPubkey Liquidity pubkey
-   * @param uiAmount Amount tokens to deposit
-   * @param source Source account of pool mint
-   * @param destination Destination account of token account
-   * @param payer Signer for transfer tokens
-   */
   async liquidityWithdraw(
     liquidityPubkey: PublicKey,
     uiAmount: number,
@@ -395,12 +368,12 @@ export class LendingMarket {
 
   async obligationCollateralDepositTx(
     obligationPubkey: PublicKey,
-    collateralPubkey: PublicKey,
     uiAmount: number,
     source: PublicKey,
     userTransferAuthority: PublicKey,
   ) {
-    const collateral = await this.getCollateralInfo(collateralPubkey)
+    const obligation = await this.getObligationInfo(obligationPubkey)
+    const collateral = await this.getCollateralInfo(obligation.collateral)
 
     const amount = new u64(
       uiAmount * Math.pow(10, await this.getMintDecimals(collateral.tokenMint)),
@@ -411,7 +384,7 @@ export class LendingMarket {
         programId: this.programId,
         market: this.pubkey,
         obligation: obligationPubkey,
-        collateral: collateralPubkey,
+        collateral: obligation.collateral,
         source,
         collateralTokenAccount: collateral.tokenAccount,
         userTransferAuthority,
@@ -424,14 +397,12 @@ export class LendingMarket {
 
   async obligationCollateralDeposit(
     obligationPubkey: PublicKey,
-    collateralPubkey: PublicKey,
     uiAmount: number,
     source: PublicKey,
     payer = this.payer,
   ) {
     const tx = await this.obligationCollateralDepositTx(
       obligationPubkey,
-      collateralPubkey,
       uiAmount,
       source,
       payer.publicKey,
@@ -443,12 +414,12 @@ export class LendingMarket {
 
   async obligationCollateralWithdrawTx(
     obligationPubkey: PublicKey,
-    collateralPubkey: PublicKey,
     uiAmount: number,
     destination: PublicKey,
-    obligationOwner: PublicKey,
   ) {
-    const collateral = await this.getCollateralInfo(collateralPubkey)
+    const obligation = await this.getObligationInfo(obligationPubkey)
+    const liquidity = await this.getLiquidityInfo(obligation.liquidity)
+    const collateral = await this.getCollateralInfo(obligation.collateral)
 
     const [marketAuthority] = await PublicKey.findProgramAddress(
       [this.pubkey.toBuffer()],
@@ -463,12 +434,15 @@ export class LendingMarket {
         programId: this.programId,
         market: this.pubkey,
         obligation: obligationPubkey,
-        collateral: collateralPubkey,
+        liquidity: obligation.liquidity,
+        collateral: obligation.collateral,
         destination,
         collateralTokenAccount: collateral.tokenAccount,
-        obligationOwner,
+        obligationOwner: obligation.owner,
         marketAuthority,
         amount,
+        liquidityOracle: liquidity.oracle,
+        collateralOracle: collateral.oracle,
       }),
     )
 
@@ -477,18 +451,11 @@ export class LendingMarket {
 
   async obligationCollateralWithdraw(
     obligationPubkey: PublicKey,
-    collateralPubkey: PublicKey,
     uiAmount: number,
     destination: PublicKey,
     payer = this.payer,
   ) {
-    const tx = await this.obligationCollateralWithdrawTx(
-      obligationPubkey,
-      collateralPubkey,
-      uiAmount,
-      destination,
-      payer.publicKey,
-    )
+    const tx = await this.obligationCollateralWithdrawTx(obligationPubkey, uiAmount, destination)
 
     const signature = await sendAndConfirmTransaction(this.connection, tx, [payer])
     console.log(`Signature: ${signature}`)
@@ -496,13 +463,12 @@ export class LendingMarket {
 
   async obligationLiquidityBorrowTx(
     obligationPubkey: PublicKey,
-    liquidityPubkey: PublicKey,
-    collateralPubkey: PublicKey,
     uiAmount: number,
     destination: PublicKey,
-    obligationOwner: PublicKey,
   ) {
-    const liquidity = await this.getLiquidityInfo(liquidityPubkey)
+    const obligation = await this.getObligationInfo(obligationPubkey)
+    const liquidity = await this.getLiquidityInfo(obligation.liquidity)
+    const collateral = await this.getCollateralInfo(obligation.collateral)
 
     const [marketAuthority] = await PublicKey.findProgramAddress(
       [this.pubkey.toBuffer()],
@@ -515,13 +481,15 @@ export class LendingMarket {
         programId: this.programId,
         market: this.pubkey,
         obligation: obligationPubkey,
-        liquidity: liquidityPubkey,
-        collateral: collateralPubkey,
+        liquidity: obligation.liquidity,
+        collateral: obligation.collateral,
         destination,
         liquidityTokenAccount: liquidity.tokenAccount,
-        obligationOwner,
+        obligationOwner: obligation.owner,
         marketAuthority,
         amount,
+        liquidityOracle: liquidity.oracle,
+        collateralOracle: collateral.oracle,
       }),
     )
 
@@ -530,20 +498,11 @@ export class LendingMarket {
 
   async obligationLiquidityBorrow(
     obligationPubkey: PublicKey,
-    liquidityPubkey: PublicKey,
-    collateralPubkey: PublicKey,
     uiAmount: number,
     destination: PublicKey,
     payer = this.payer,
   ) {
-    const tx = await this.obligationLiquidityBorrowTx(
-      obligationPubkey,
-      liquidityPubkey,
-      collateralPubkey,
-      uiAmount,
-      destination,
-      payer.publicKey,
-    )
+    const tx = await this.obligationLiquidityBorrowTx(obligationPubkey, uiAmount, destination)
 
     const signature = await sendAndConfirmTransaction(this.connection, tx, [payer])
     console.log(`Signature: ${signature}`)
@@ -551,12 +510,12 @@ export class LendingMarket {
 
   async obligationLiquidityRepayTx(
     obligationPubkey: PublicKey,
-    liquidityPubkey: PublicKey,
     uiAmount: number,
     source: PublicKey,
     userTransferAuthority: PublicKey,
   ) {
-    const liquidity = await this.getLiquidityInfo(liquidityPubkey)
+    const obligation = await this.getObligationInfo(obligationPubkey)
+    const liquidity = await this.getLiquidityInfo(obligation.liquidity)
 
     const amount = new u64(uiAmount * Math.pow(10, await this.getMintDecimals(liquidity.tokenMint)))
 
@@ -565,7 +524,7 @@ export class LendingMarket {
         programId: this.programId,
         market: this.pubkey,
         obligation: obligationPubkey,
-        liquidity: liquidityPubkey,
+        liquidity: obligation.liquidity,
         source,
         liquidityTokenAccount: liquidity.tokenAccount,
         userTransferAuthority,
@@ -578,16 +537,67 @@ export class LendingMarket {
 
   async obligationLiquidityRepay(
     obligationPubkey: PublicKey,
-    liquidityPubkey: PublicKey,
     uiAmount: number,
     source: PublicKey,
     payer = this.payer,
   ) {
     const tx = await this.obligationLiquidityRepayTx(
       obligationPubkey,
-      liquidityPubkey,
       uiAmount,
       source,
+      payer.publicKey,
+    )
+
+    const signature = await sendAndConfirmTransaction(this.connection, tx, [payer])
+    console.log(`Signature: ${signature}`)
+  }
+
+  async liquidateObligationTx(
+    obligationPubkey: PublicKey,
+    source: PublicKey,
+    destination: PublicKey,
+    userTransferAuthority: PublicKey,
+  ) {
+    const obligation = await this.getObligationInfo(obligationPubkey)
+    const liquidity = await this.getLiquidityInfo(obligation.liquidity)
+    const collateral = await this.getCollateralInfo(obligation.collateral)
+
+    const [marketAuthority] = await PublicKey.findProgramAddress(
+      [this.pubkey.toBuffer()],
+      this.programId,
+    )
+
+    const tx = new Transaction().add(
+      Instruction.liquidateObligation({
+        programId: this.programId,
+        market: this.pubkey,
+        obligation: obligationPubkey,
+        source,
+        destination,
+        liquidity: obligation.liquidity,
+        collateral: obligation.collateral,
+        liquidityTokenAccount: liquidity.tokenAccount,
+        collateralTokenAccount: collateral.tokenAccount,
+        userTransferAuthority,
+        marketAuthority,
+        liquidityOracle: liquidity.oracle,
+        collateralOracle: collateral.oracle,
+      }),
+    )
+
+    return tx
+  }
+
+  async liquidateObligation(
+    obligationPubkey: PublicKey,
+    source: PublicKey,
+    destination: PublicKey,
+    payer = this.payer,
+  ) {
+    const tx = await this.liquidateObligationTx(
+      obligationPubkey,
+      source,
+      destination,
       payer.publicKey,
     )
 

@@ -37,11 +37,20 @@ export class Liquidity {
     public tokenAccount: PublicKey,
     public poolMint: PublicKey,
     public amountBorrowed: u64,
+    public oracle: PublicKey,
   ) {}
 
   static from(buffer: Buffer): Liquidity {
-    const { version, status, market, token_mint, token_account, pool_mint, amount_borrowed } =
-      LiquidityLayout.decode(buffer)
+    const {
+      version,
+      status,
+      market,
+      token_mint,
+      token_account,
+      pool_mint,
+      amount_borrowed,
+      oracle,
+    } = LiquidityLayout.decode(buffer)
 
     return {
       version,
@@ -51,6 +60,7 @@ export class Liquidity {
       tokenAccount: new PublicKey(token_account),
       poolMint: new PublicKey(pool_mint),
       amountBorrowed: u64.fromBuffer(amount_borrowed),
+      oracle: new PublicKey(oracle),
     }
   }
 }
@@ -70,11 +80,20 @@ export class Collateral {
     public tokenAccount: PublicKey,
     public ratioInitial: u64,
     public ratioHealthy: u64,
+    public oracle: PublicKey,
   ) {}
 
   static from(buffer: Buffer): Collateral {
-    const { version, status, market, token_mint, token_account, ratio_initial, ratio_healthy } =
-      CollateralLayout.decode(buffer)
+    const {
+      version,
+      status,
+      market,
+      token_mint,
+      token_account,
+      ratio_initial,
+      ratio_healthy,
+      oracle,
+    } = CollateralLayout.decode(buffer)
 
     return {
       version,
@@ -84,6 +103,7 @@ export class Collateral {
       tokenAccount: new PublicKey(token_account),
       ratioInitial: u64.fromBuffer(ratio_initial),
       ratioHealthy: u64.fromBuffer(ratio_healthy),
+      oracle: new PublicKey(oracle),
     }
   }
 }

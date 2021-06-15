@@ -2,6 +2,7 @@ import { TOKEN_PROGRAM_ID, u64 } from '@solana/spl-token'
 import {
   PublicKey,
   SystemProgram,
+  SYSVAR_CLOCK_PUBKEY,
   SYSVAR_RENT_PUBKEY,
   TransactionInstruction,
 } from '@solana/web3.js'
@@ -174,22 +175,28 @@ export const obligationCollateralDeposit = ({
 export type ObligationCollateralWithdrawParams = BaseInstructionParams & {
   market: PublicKey
   obligation: PublicKey
+  liquidity: PublicKey
   collateral: PublicKey
   destination: PublicKey
   collateralTokenAccount: PublicKey
   obligationOwner: PublicKey
   marketAuthority: PublicKey
+  liquidityOracle: PublicKey
+  collateralOracle: PublicKey
   amount: u64
 }
 export const obligationCollateralWithdraw = ({
   programId,
   market,
+  liquidity,
   obligation,
   collateral,
   destination,
   collateralTokenAccount,
   obligationOwner,
   marketAuthority,
+  liquidityOracle,
+  collateralOracle,
   amount,
 }: ObligationCollateralWithdrawParams) => {
   const data = encodeData(MarketInsructionLayouts.ObligationCollateralWithdraw, {
@@ -199,12 +206,16 @@ export const obligationCollateralWithdraw = ({
   return new TransactionInstruction({
     keys: [
       { pubkey: obligation, isSigner: false, isWritable: true },
+      { pubkey: liquidity, isSigner: false, isWritable: false },
       { pubkey: collateral, isSigner: false, isWritable: false },
       { pubkey: destination, isSigner: false, isWritable: true },
       { pubkey: collateralTokenAccount, isSigner: false, isWritable: true },
       { pubkey: market, isSigner: false, isWritable: false },
       { pubkey: obligationOwner, isSigner: true, isWritable: false },
       { pubkey: marketAuthority, isSigner: false, isWritable: false },
+      { pubkey: liquidityOracle, isSigner: false, isWritable: false },
+      { pubkey: collateralOracle, isSigner: false, isWritable: false },
+      { pubkey: SYSVAR_CLOCK_PUBKEY, isSigner: false, isWritable: false },
       { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
     ],
     programId: new PublicKey(programId),
@@ -221,6 +232,8 @@ export type ObligationLiquidityBorrowParams = BaseInstructionParams & {
   liquidityTokenAccount: PublicKey
   obligationOwner: PublicKey
   marketAuthority: PublicKey
+  liquidityOracle: PublicKey
+  collateralOracle: PublicKey
   amount: u64
 }
 export const obligationLiquidityBorrow = ({
@@ -233,6 +246,8 @@ export const obligationLiquidityBorrow = ({
   liquidityTokenAccount,
   obligationOwner,
   marketAuthority,
+  liquidityOracle,
+  collateralOracle,
   amount,
 }: ObligationLiquidityBorrowParams) => {
   const data = encodeData(MarketInsructionLayouts.ObligationLiquidityBorrow, {
@@ -249,6 +264,9 @@ export const obligationLiquidityBorrow = ({
       { pubkey: market, isSigner: false, isWritable: false },
       { pubkey: obligationOwner, isSigner: true, isWritable: false },
       { pubkey: marketAuthority, isSigner: false, isWritable: false },
+      { pubkey: liquidityOracle, isSigner: false, isWritable: false },
+      { pubkey: collateralOracle, isSigner: false, isWritable: false },
+      { pubkey: SYSVAR_CLOCK_PUBKEY, isSigner: false, isWritable: false },
       { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
     ],
     programId: new PublicKey(programId),
@@ -287,6 +305,59 @@ export const obligationLiquidityRepay = ({
       { pubkey: liquidityTokenAccount, isSigner: false, isWritable: true },
       { pubkey: market, isSigner: false, isWritable: false },
       { pubkey: userTransferAuthority, isSigner: true, isWritable: false },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+    programId: new PublicKey(programId),
+    data,
+  })
+}
+
+export type LiquidateObligationParams = BaseInstructionParams & {
+  market: PublicKey
+  obligation: PublicKey
+  source: PublicKey
+  destination: PublicKey
+  liquidity: PublicKey
+  collateral: PublicKey
+  liquidityTokenAccount: PublicKey
+  collateralTokenAccount: PublicKey
+  userTransferAuthority: PublicKey
+  marketAuthority: PublicKey
+  liquidityOracle: PublicKey
+  collateralOracle: PublicKey
+}
+export const liquidateObligation = ({
+  programId,
+  market,
+  obligation,
+  source,
+  destination,
+  liquidity,
+  collateral,
+  liquidityTokenAccount,
+  collateralTokenAccount,
+  userTransferAuthority,
+  marketAuthority,
+  liquidityOracle,
+  collateralOracle,
+}: LiquidateObligationParams) => {
+  const data = encodeData(MarketInsructionLayouts.LiquidateObligation)
+
+  return new TransactionInstruction({
+    keys: [
+      { pubkey: obligation, isSigner: false, isWritable: true },
+      { pubkey: source, isSigner: false, isWritable: true },
+      { pubkey: destination, isSigner: false, isWritable: true },
+      { pubkey: liquidity, isSigner: false, isWritable: true },
+      { pubkey: collateral, isSigner: false, isWritable: true },
+      { pubkey: liquidityTokenAccount, isSigner: false, isWritable: true },
+      { pubkey: collateralTokenAccount, isSigner: false, isWritable: true },
+      { pubkey: market, isSigner: false, isWritable: false },
+      { pubkey: userTransferAuthority, isSigner: true, isWritable: false },
+      { pubkey: marketAuthority, isSigner: false, isWritable: false },
+      { pubkey: liquidityOracle, isSigner: false, isWritable: false },
+      { pubkey: collateralOracle, isSigner: false, isWritable: false },
+      { pubkey: SYSVAR_CLOCK_PUBKEY, isSigner: false, isWritable: false },
       { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
     ],
     programId: new PublicKey(programId),

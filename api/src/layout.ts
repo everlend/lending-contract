@@ -18,6 +18,7 @@ export const LiquidityLayout = BufferLayout.struct([
   BaseLayout.publicKey('token_account'),
   BaseLayout.publicKey('pool_mint'),
   BaseLayout.uint64('amount_borrowed'),
+  BaseLayout.publicKey('oracle'),
 ])
 
 export const CollateralLayout = BufferLayout.struct([
@@ -28,6 +29,7 @@ export const CollateralLayout = BufferLayout.struct([
   BaseLayout.publicKey('token_account'),
   BaseLayout.uint64('ratio_initial'),
   BaseLayout.uint64('ratio_healthy'),
+  BaseLayout.publicKey('oracle'),
 ])
 
 export const ObligationLayout = BufferLayout.struct([
@@ -68,5 +70,9 @@ export const MarketInsructionLayouts = {
   ObligationLiquidityRepay: {
     index: 11,
     layout: BufferLayout.struct([InstructionLayout, BaseLayout.uint64('amount')]),
+  },
+  LiquidateObligation: {
+    index: 12,
+    layout: BufferLayout.struct([InstructionLayout]),
   },
 }
