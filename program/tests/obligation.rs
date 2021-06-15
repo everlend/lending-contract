@@ -17,18 +17,21 @@ async fn setup() -> (
     LiquidityInfo,
     CollateralInfo,
 ) {
-    let mut context = program_test().start_with_context().await;
+    let mut test = program_test();
+    let sol_oracle = add_sol_oracle(&mut test);
+    let srm_oracle = add_srm_oracle(&mut test);
+    let mut context = test.start_with_context().await;
 
     let market_info = MarketInfo::new();
     market_info.init(&mut context).await.unwrap();
 
     let liquidity_info = market_info
-        .create_liquidity_token(&mut context, None)
+        .create_liquidity_token(&mut context, &sol_oracle)
         .await
         .unwrap();
 
     let collateral_info = market_info
-        .create_collateral_token(&mut context, None)
+        .create_collateral_token(&mut context, &srm_oracle)
         .await
         .unwrap();
 
@@ -180,7 +183,7 @@ async fn success() {
 }
 
 #[tokio::test]
-async fn collateral_deposit() {
+async fn success_collateral_deposit() {
     let (mut context, market_info, liquidity_info, collateral_info) = setup().await;
     let (obligation_info, borrower_collateral, _) = prepare_borrower(
         &mut context,
@@ -213,7 +216,7 @@ async fn collateral_deposit() {
 }
 
 #[tokio::test]
-async fn collateral_withdraw() {
+async fn success_collateral_withdraw() {
     let (mut context, market_info, liquidity_info, collateral_info) = setup().await;
     let (obligation_info, borrower_collateral, _) = prepare_borrower(
         &mut context,
@@ -244,8 +247,6 @@ async fn collateral_withdraw() {
             &collateral_info,
             WITHDRAW_AMOUNT,
             &borrower_collateral.pubkey(),
-            &None,
-            &None,
         )
         .await
         .unwrap();
@@ -278,8 +279,6 @@ async fn fail_collateral_withdraw_without_deposit() {
                 &collateral_info,
                 WITHDRAW_AMOUNT,
                 &borrower_collateral.pubkey(),
-                &None,
-                &None,
             )
             .await
             .unwrap_err()
@@ -292,7 +291,7 @@ async fn fail_collateral_withdraw_without_deposit() {
 }
 
 #[tokio::test]
-async fn liquidity_borrow() {
+async fn success_liquidity_borrow() {
     let (mut context, market_info, liquidity_info, collateral_info) = setup().await;
 
     const DEPOSIT_AMOUNT: u64 = 10000;
@@ -351,7 +350,7 @@ async fn liquidity_borrow() {
 }
 
 #[tokio::test]
-async fn liquidity_repay() {
+async fn success_liquidity_repay() {
     let (mut context, market_info, liquidity_info, collateral_info) = setup().await;
 
     const DEPOSIT_AMOUNT: u64 = 10000;
@@ -431,7 +430,7 @@ async fn liquidity_repay() {
 }
 
 #[tokio::test]
-async fn liquidate() {
+async fn success_liquidate() {
     let (mut context, market_info, liquidity_info, collateral_info) = setup().await;
     let (obligation_info, borrower_collateral, borrower_liquidity) = prepare_borrower(
         &mut context,

@@ -251,13 +251,14 @@ pub fn create_liquidity_token(
     pool_mint: &Pubkey,
     market: &Pubkey,
     market_owner: &Pubkey,
-    liquidity_oracle: &Option<Pubkey>,
+    oracle_product: &Pubkey,
+    oracle_price: &Pubkey,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LendingInstruction::CreateLiquidityToken;
     let data = init_data.try_to_vec()?;
     let (market_authority, _) = find_program_address(program_id, market);
 
-    let mut accounts = vec![
+    let accounts = vec![
         AccountMeta::new(*liquidity, false),
         AccountMeta::new_readonly(*token_mint, false),
         AccountMeta::new(*token_account, false),
@@ -265,13 +266,12 @@ pub fn create_liquidity_token(
         AccountMeta::new(*market, false),
         AccountMeta::new_readonly(*market_owner, true),
         AccountMeta::new_readonly(market_authority, false),
+        AccountMeta::new_readonly(*oracle_product, false),
+        AccountMeta::new_readonly(*oracle_price, false),
         AccountMeta::new_readonly(sysvar::rent::id(), false),
         AccountMeta::new_readonly(system_program::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
     ];
-    if let Some(liquidity_oracle) = liquidity_oracle {
-        accounts.push(AccountMeta::new_readonly(*liquidity_oracle, false));
-    }
 
     Ok(Instruction {
         program_id: *program_id,
@@ -315,7 +315,8 @@ pub fn create_collateral_token(
     token_account: &Pubkey,
     market: &Pubkey,
     market_owner: &Pubkey,
-    collateral_oracle: &Option<Pubkey>,
+    oracle_product: &Pubkey,
+    oracle_price: &Pubkey,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LendingInstruction::CreateCollateralToken {
         ratio_initial,
@@ -324,20 +325,19 @@ pub fn create_collateral_token(
     let data = init_data.try_to_vec()?;
     let (market_authority, _) = find_program_address(program_id, market);
 
-    let mut accounts = vec![
+    let accounts = vec![
         AccountMeta::new(*collateral, false),
         AccountMeta::new_readonly(*token_mint, false),
         AccountMeta::new(*token_account, false),
         AccountMeta::new(*market, false),
         AccountMeta::new_readonly(*market_owner, true),
         AccountMeta::new_readonly(market_authority, false),
+        AccountMeta::new_readonly(*oracle_product, false),
+        AccountMeta::new_readonly(*oracle_price, false),
         AccountMeta::new_readonly(sysvar::rent::id(), false),
         AccountMeta::new_readonly(system_program::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
     ];
-    if let Some(collateral_oracle) = collateral_oracle {
-        accounts.push(AccountMeta::new_readonly(*collateral_oracle, false));
-    }
 
     Ok(Instruction {
         program_id: *program_id,
@@ -524,14 +524,14 @@ pub fn obligation_collateral_withdraw(
     collateral_token_account: &Pubkey,
     market: &Pubkey,
     obligation_owner: &Pubkey,
-    liquidity_oracle: &Option<Pubkey>,
-    collateral_oracle: &Option<Pubkey>,
+    liquidity_oracle: &Pubkey,
+    collateral_oracle: &Pubkey,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LendingInstruction::ObligationCollateralWithdraw { amount };
     let data = init_data.try_to_vec()?;
     let (market_authority, _) = find_program_address(program_id, market);
 
-    let mut accounts = vec![
+    let accounts = vec![
         AccountMeta::new(*obligation, false),
         AccountMeta::new_readonly(*liquidity, false),
         AccountMeta::new_readonly(*collateral, false),
@@ -540,15 +540,11 @@ pub fn obligation_collateral_withdraw(
         AccountMeta::new_readonly(*market, false),
         AccountMeta::new_readonly(*obligation_owner, true),
         AccountMeta::new_readonly(market_authority, false),
+        AccountMeta::new_readonly(*liquidity_oracle, false),
+        AccountMeta::new_readonly(*collateral_oracle, false),
+        AccountMeta::new_readonly(sysvar::clock::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
     ];
-    match (liquidity_oracle, collateral_oracle) {
-        (Some(liquidity_oracle), Some(collateral_oracle)) => {
-            accounts.push(AccountMeta::new_readonly(*liquidity_oracle, false));
-            accounts.push(AccountMeta::new_readonly(*collateral_oracle, false));
-        }
-        _ => (),
-    }
 
     Ok(Instruction {
         program_id: *program_id,
@@ -569,6 +565,8 @@ pub fn obligation_liquidity_borrow(
     liquidity_token_account: &Pubkey,
     market: &Pubkey,
     obligation_owner: &Pubkey,
+    liquidity_oracle: &Pubkey,
+    collateral_oracle: &Pubkey,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LendingInstruction::ObligationLiquidityBorrow { amount };
     let data = init_data.try_to_vec()?;
@@ -583,9 +581,11 @@ pub fn obligation_liquidity_borrow(
         AccountMeta::new_readonly(*market, false),
         AccountMeta::new_readonly(*obligation_owner, true),
         AccountMeta::new_readonly(market_authority, false),
+        AccountMeta::new_readonly(*liquidity_oracle, false),
+        AccountMeta::new_readonly(*collateral_oracle, false),
+        AccountMeta::new_readonly(sysvar::clock::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
     ];
-    // TODO: add optional oracles
 
     Ok(Instruction {
         program_id: *program_id,
@@ -639,14 +639,14 @@ pub fn liquidate_obligation(
     collateral_token_account: &Pubkey,
     market: &Pubkey,
     user_transfer_authority: &Pubkey,
-    liquidity_oracle: &Option<Pubkey>,
-    collateral_oracle: &Option<Pubkey>,
+    liquidity_oracle: &Pubkey,
+    collateral_oracle: &Pubkey,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LendingInstruction::LiquidateObligation;
     let data = init_data.try_to_vec()?;
     let (market_authority, _) = find_program_address(program_id, market);
 
-    let mut accounts = vec![
+    let accounts = vec![
         AccountMeta::new(*obligation, false),
         AccountMeta::new(*source, false),
         AccountMeta::new(*destination, false),
@@ -657,15 +657,11 @@ pub fn liquidate_obligation(
         AccountMeta::new_readonly(*market, false),
         AccountMeta::new_readonly(*user_transfer_authority, true),
         AccountMeta::new_readonly(market_authority, false),
+        AccountMeta::new_readonly(*liquidity_oracle, false),
+        AccountMeta::new_readonly(*collateral_oracle, false),
+        AccountMeta::new_readonly(sysvar::clock::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
     ];
-    match (liquidity_oracle, collateral_oracle) {
-        (Some(liquidity_oracle), Some(collateral_oracle)) => {
-            accounts.push(AccountMeta::new_readonly(*liquidity_oracle, false));
-            accounts.push(AccountMeta::new_readonly(*collateral_oracle, false));
-        }
-        _ => (),
-    }
 
     Ok(Instruction {
         program_id: *program_id,

@@ -46,8 +46,8 @@ pub struct Collateral {
     pub ratio_initial: u64,
     /// Fractional limit for the healthy collateralization ratio (multiplied by 10e9)
     pub ratio_healthy: u64,
-    /// Oracle state account pubkey - optional
-    pub oracle: Option<Pubkey>,
+    /// Oracle price account pubkey
+    pub oracle: Pubkey,
 }
 
 impl Collateral {
@@ -84,8 +84,8 @@ impl Collateral {
 
 impl Sealed for Collateral {}
 impl Pack for Collateral {
-    // 1 + 1 + 32 + 32 + 32 + 8 + 8 + (1 + 32)
-    const LEN: usize = 147;
+    // 1 + 1 + 32 + 32 + 32 + 8 + 8 + 32
+    const LEN: usize = 146;
 
     fn pack_into_slice(&self, dst: &mut [u8]) {
         let mut slice = dst;
@@ -114,8 +114,8 @@ pub struct InitCollateralParams {
     pub ratio_initial: u64,
     /// Fractional limit for the healthy collateralization ratio (multiplied by 10e9)
     pub ratio_healthy: u64,
-    /// Oracle state account pubkey - optional
-    pub oracle: Option<Pubkey>,
+    /// Oracle price account pubkey
+    pub oracle: Pubkey,
 }
 
 impl IsInitialized for Collateral {

@@ -17,6 +17,9 @@ pub enum LendingError {
     /// The calculation failed.
     #[error("Calculation failure")]
     CalculationFailure,
+    /// Math operation overflow
+    #[error("Math operation overflow")]
+    MathOverflow,
     /// Collateral ratio check failed, returned if user borrows too much or withdraws too much collateral.
     #[error("Collateral ratio check failed")]
     CollateralRatioCheckFailed,

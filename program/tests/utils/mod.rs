@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use std::str::FromStr;
+
 use everlend_lending::{id, processor};
 use solana_program::{program_pack::Pack, system_instruction};
 use solana_program_test::ProgramTestContext;
@@ -13,13 +15,21 @@ pub mod collateral;
 pub mod liquidity;
 pub mod market;
 pub mod obligation;
+pub mod oracle;
 pub mod provider;
 
 pub use collateral::CollateralInfo;
 pub use liquidity::LiquidityInfo;
 pub use market::MarketInfo;
 pub use obligation::ObligationInfo;
+pub use oracle::TestOracle;
 pub use provider::ProviderActor;
+
+pub const SOL_PYTH_PRODUCT: &str = "8yrQMUyJRnCJ72NWwMiPV9dNGw465Z8bKUvnUC8P5L6F";
+pub const SOL_PYTH_PRICE: &str = "BdgHsXrH1mXqhdosXavYxZgX6bGqTdj5mh2sxDhF8bJy";
+
+pub const SRM_PYTH_PRODUCT: &str = "5agdsn3jogTt8F537GW3g8BuLaBGrg9Q2gPKUNqBV6Dh";
+pub const SRM_PYTH_PRICE: &str = "2Mt2wcRXpCAbTRp2VjFqGa8SbJVzjJvyK4Tx7aqbRtBJ";
 
 pub fn program_test() -> ProgramTest {
     ProgramTest::new(
@@ -135,4 +145,26 @@ pub async fn mint_tokens(
     );
 
     context.banks_client.process_transaction(tx).await
+}
+
+pub fn add_sol_oracle(test: &mut ProgramTest) -> TestOracle {
+    let oracle = TestOracle::new(
+        &Pubkey::from_str(SOL_PYTH_PRODUCT).unwrap(),
+        &Pubkey::from_str(SOL_PYTH_PRICE).unwrap(),
+        10000,
+    );
+    oracle.init(test);
+
+    oracle
+}
+
+pub fn add_srm_oracle(test: &mut ProgramTest) -> TestOracle {
+    let oracle = TestOracle::new(
+        &Pubkey::from_str(SRM_PYTH_PRODUCT).unwrap(),
+        &Pubkey::from_str(SRM_PYTH_PRICE).unwrap(),
+        20000,
+    );
+    oracle.init(test);
+
+    oracle
 }

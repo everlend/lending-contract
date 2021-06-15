@@ -48,8 +48,8 @@ pub struct Liquidity {
     pub pool_mint: Pubkey,
     /// Amount borrowed from the liquidity pool
     pub amount_borrowed: u64,
-    /// Oracle state account pubkey - optional
-    pub oracle: Option<Pubkey>,
+    /// Oracle price account pubkey
+    pub oracle: Pubkey,
 }
 
 impl Liquidity {
@@ -140,14 +140,14 @@ pub struct InitLiquidityParams {
     pub token_account: Pubkey,
     /// Token that lenders will receive
     pub pool_mint: Pubkey,
-    /// Oracle state account pubkey - optional
-    pub oracle: Option<Pubkey>,
+    /// Oracle price account pubkey
+    pub oracle: Pubkey,
 }
 
 impl Sealed for Liquidity {}
 impl Pack for Liquidity {
-    // 1 + 1 + 32 + 32 + 32 + 32 + 8 + (1 + 32)
-    const LEN: usize = 171;
+    // 1 + 1 + 32 + 32 + 32 + 32 + 8 + 32
+    const LEN: usize = 170;
 
     fn pack_into_slice(&self, dst: &mut [u8]) {
         let mut slice = dst;

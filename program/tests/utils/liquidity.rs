@@ -1,4 +1,4 @@
-use super::{get_account, market::MarketInfo};
+use super::{get_account, market::MarketInfo, oracle::TestOracle};
 use everlend_lending::{
     find_program_address, id, instruction,
     state::{Liquidity, LiquidityStatus},
@@ -17,11 +17,11 @@ pub struct LiquidityInfo {
     pub token_mint: Keypair,
     pub token_account: Keypair,
     pub pool_mint: Keypair,
-    pub oracle_pubkey: Option<Pubkey>,
+    pub oracle: Pubkey,
 }
 
 impl LiquidityInfo {
-    pub fn new(seed: &str, market_info: &MarketInfo, oracle_pubkey: Option<Pubkey>) -> Self {
+    pub fn new(seed: &str, market_info: &MarketInfo, oracle: &TestOracle) -> Self {
         let (market_authority, _) =
             find_program_address(&everlend_lending::id(), &market_info.market.pubkey());
 
@@ -30,7 +30,7 @@ impl LiquidityInfo {
             token_mint: Keypair::new(),
             token_account: Keypair::new(),
             pool_mint: Keypair::new(),
-            oracle_pubkey,
+            oracle: oracle.price_pubkey,
         }
     }
 
@@ -43,6 +43,7 @@ impl LiquidityInfo {
         &self,
         context: &mut ProgramTestContext,
         market_info: &MarketInfo,
+        oracle: &TestOracle,
     ) -> transport::Result<()> {
         let rent = context.banks_client.get_rent().await.unwrap();
 
@@ -76,7 +77,8 @@ impl LiquidityInfo {
                     &self.pool_mint.pubkey(),
                     &market_info.market.pubkey(),
                     &market_info.owner.pubkey(),
-                    &self.oracle_pubkey,
+                    &oracle.product_pubkey,
+                    &oracle.price_pubkey,
                 )
                 .unwrap(),
             ],

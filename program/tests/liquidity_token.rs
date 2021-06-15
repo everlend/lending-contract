@@ -6,23 +6,25 @@ use everlend_lending::state::LiquidityStatus;
 use solana_program_test::*;
 use utils::*;
 
-async fn setup() -> (ProgramTestContext, MarketInfo) {
-    let mut context = program_test().start_with_context().await;
+async fn setup() -> (ProgramTestContext, MarketInfo, TestOracle) {
+    let mut test = program_test();
+    let sol_oracle = add_sol_oracle(&mut test);
+    let mut context = test.start_with_context().await;
 
     let market_info = MarketInfo::new();
     market_info.init(&mut context).await.unwrap();
 
-    (context, market_info)
+    (context, market_info, sol_oracle)
 }
 
 #[tokio::test]
 async fn success() {
-    let (mut context, market_info) = setup().await;
+    let (mut context, market_info, oracle) = setup().await;
 
     assert_eq!(market_info.get_data(&mut context).await.liquidity_tokens, 0);
 
     let liquidity_info = market_info
-        .create_liquidity_token(&mut context, None)
+        .create_liquidity_token(&mut context, &oracle)
         .await
         .unwrap();
 
@@ -33,16 +35,16 @@ async fn success() {
 }
 
 #[tokio::test]
-async fn two_tokens() {
-    let (mut context, market_info) = setup().await;
+async fn success_two_tokens() {
+    let (mut context, market_info, oracle) = setup().await;
 
     market_info
-        .create_liquidity_token(&mut context, None)
+        .create_liquidity_token(&mut context, &oracle)
         .await
         .unwrap();
 
     market_info
-        .create_liquidity_token(&mut context, None)
+        .create_liquidity_token(&mut context, &oracle)
         .await
         .unwrap();
 
@@ -50,11 +52,11 @@ async fn two_tokens() {
 }
 
 #[tokio::test]
-async fn update_token() {
-    let (mut context, market_info) = setup().await;
+async fn success_update_token() {
+    let (mut context, market_info, oracle) = setup().await;
 
     let liquidity_info = market_info
-        .create_liquidity_token(&mut context, None)
+        .create_liquidity_token(&mut context, &oracle)
         .await
         .unwrap();
 

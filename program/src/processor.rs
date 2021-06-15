@@ -1,18 +1,23 @@
 //! Program state processor
 
-use crate::{error::LendingError, instruction::LendingInstruction};
-use crate::{find_obligation_authority, find_program_address, state::*};
+use std::convert::TryInto;
+
+use crate::{
+    error::LendingError,
+    find_obligation_authority, find_program_address,
+    instruction::LendingInstruction,
+    pyth::{self, Price, PriceType, Product},
+    state::*,
+};
 use borsh::BorshDeserialize;
-use flux_aggregator::read_median;
-use flux_aggregator::{borsh_state::InitBorshState, state::Aggregator};
-use solana_program::program_pack::IsInitialized;
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
+    clock::Clock,
     entrypoint::ProgramResult,
     msg,
     program::{invoke, invoke_signed},
     program_error::ProgramError,
-    program_pack::Pack,
+    program_pack::{IsInitialized, Pack},
     pubkey::Pubkey,
     rent::Rent,
     system_instruction,
@@ -65,6 +70,8 @@ impl Processor {
         let market_info = next_account_info(account_info_iter)?;
         let market_owner_info = next_account_info(account_info_iter)?;
         let market_authority_info = next_account_info(account_info_iter)?;
+        let oracle_product_info = next_account_info(account_info_iter)?;
+        let oracle_price_info = next_account_info(account_info_iter)?;
         let rent_info = next_account_info(account_info_iter)?;
         let _system_program_info = next_account_info(account_info_iter)?;
         let _token_program_info = next_account_info(account_info_iter)?;
@@ -109,21 +116,33 @@ impl Processor {
 
         let token_mint = Mint::unpack(&token_mint_info.data.borrow())?;
 
-        // Optional oracle
-        let liquidity_oracle_pubkey = if let Ok(liquidity_oracle_info) =
-            next_account_info(account_info_iter)
-        {
-            assert_rent_exempt(rent, liquidity_oracle_info)?;
-            let aggregator = Aggregator::load_initialized(liquidity_oracle_info)?;
-            if aggregator.config.decimals != token_mint.decimals {
-                msg!("Token mint decimals does not match the aggregator config decimals provided");
-                return Err(LendingError::InvalidOracleConfig.into());
-            }
+        let oracle_product_data = oracle_product_info.try_borrow_data()?;
+        let oracle_product = pyth::load::<Product>(&oracle_product_data)
+            .map_err(|_| ProgramError::InvalidAccountData)?;
 
-            Some(*liquidity_oracle_info.key)
-        } else {
-            None
-        };
+        if oracle_product.magic != pyth::MAGIC {
+            msg!("Pyth product account provided is not a valid Pyth account");
+            return Err(LendingError::InvalidOracleConfig.into());
+        }
+        if oracle_product.ver != pyth::VERSION_1 {
+            msg!("Pyth product account provided has a different version than expected");
+            return Err(LendingError::InvalidOracleConfig.into());
+        }
+        if oracle_product.atype != pyth::AccountType::Product as u32 {
+            msg!("Pyth product account provided is not a valid Pyth product account");
+            return Err(LendingError::InvalidOracleConfig.into());
+        }
+
+        let oracle_price_pubkey_bytes: &[u8; 32] = oracle_price_info
+            .key
+            .as_ref()
+            .try_into()
+            .map_err(|_| ProgramError::InvalidArgument)?;
+
+        if &oracle_product.px_acc.val != oracle_price_pubkey_bytes {
+            msg!("Pyth product price account does not match the Pyth price provided");
+            return Err(LendingError::InvalidOracleConfig.into());
+        }
 
         // Initialize token account for spl token
         spl_initialize_account(
@@ -147,7 +166,7 @@ impl Processor {
             token_mint: *token_mint_info.key,
             token_account: *token_account_info.key,
             pool_mint: *pool_mint_info.key,
-            oracle: liquidity_oracle_pubkey,
+            oracle: *oracle_price_info.key,
         });
         market.increase_liquidity_tokens();
 
@@ -210,6 +229,8 @@ impl Processor {
         let market_info = next_account_info(account_info_iter)?;
         let market_owner_info = next_account_info(account_info_iter)?;
         let market_authority_info = next_account_info(account_info_iter)?;
+        let oracle_product_info = next_account_info(account_info_iter)?;
+        let oracle_price_info = next_account_info(account_info_iter)?;
         let rent_info = next_account_info(account_info_iter)?;
         let _system_program_info = next_account_info(account_info_iter)?;
         let _token_program_info = next_account_info(account_info_iter)?;
@@ -252,23 +273,33 @@ impl Processor {
         let mut collateral = Collateral::unpack_unchecked(&collateral_info.data.borrow())?;
         assert_uninitialized(&collateral)?;
 
-        let token_mint = Mint::unpack(&token_mint_info.data.borrow())?;
+        let oracle_product_data = oracle_product_info.try_borrow_data()?;
+        let oracle_product = pyth::load::<Product>(&oracle_product_data)
+            .map_err(|_| ProgramError::InvalidAccountData)?;
 
-        // Optional oracle
-        let collateral_oracle_pubkey = if let Ok(collateral_oracle_info) =
-            next_account_info(account_info_iter)
-        {
-            assert_rent_exempt(rent, collateral_oracle_info)?;
-            let aggregator = Aggregator::load_initialized(collateral_oracle_info)?;
-            if aggregator.config.decimals != token_mint.decimals {
-                msg!("Token mint decimals does not match the aggregator config decimals provided");
-                return Err(LendingError::InvalidOracleConfig.into());
-            }
+        if oracle_product.magic != pyth::MAGIC {
+            msg!("Pyth product account provided is not a valid Pyth account");
+            return Err(LendingError::InvalidOracleConfig.into());
+        }
+        if oracle_product.ver != pyth::VERSION_1 {
+            msg!("Pyth product account provided has a different version than expected");
+            return Err(LendingError::InvalidOracleConfig.into());
+        }
+        if oracle_product.atype != pyth::AccountType::Product as u32 {
+            msg!("Pyth product account provided is not a valid Pyth product account");
+            return Err(LendingError::InvalidOracleConfig.into());
+        }
 
-            Some(*collateral_oracle_info.key)
-        } else {
-            None
-        };
+        let oracle_price_pubkey_bytes: &[u8; 32] = oracle_price_info
+            .key
+            .as_ref()
+            .try_into()
+            .map_err(|_| ProgramError::InvalidArgument)?;
+
+        if &oracle_product.px_acc.val != oracle_price_pubkey_bytes {
+            msg!("Pyth product price account does not match the Pyth price provided");
+            return Err(LendingError::InvalidOracleConfig.into());
+        }
 
         // Initialize token account for spl token
         spl_initialize_account(
@@ -285,7 +316,7 @@ impl Processor {
             token_account: *token_account_info.key,
             ratio_initial,
             ratio_healthy,
-            oracle: collateral_oracle_pubkey,
+            oracle: *oracle_price_info.key,
         });
         market.increase_collateral_tokens();
 
@@ -667,6 +698,9 @@ impl Processor {
         let market_info = next_account_info(account_info_iter)?;
         let obligation_owner_info = next_account_info(account_info_iter)?;
         let market_authority_info = next_account_info(account_info_iter)?;
+        let liquidity_oracle_info = next_account_info(account_info_iter)?;
+        let collateral_oracle_info = next_account_info(account_info_iter)?;
+        let clock_info = next_account_info(account_info_iter)?;
         let _token_program_info = next_account_info(account_info_iter)?;
 
         if !obligation_owner_info.is_signer {
@@ -727,12 +761,14 @@ impl Processor {
             return Err(ProgramError::InvalidArgument);
         }
 
-        // Process optional oracles for market price, else returns 1
+        let clock = &Clock::from_account_info(clock_info)?;
+
         let (liquidity_market_price, collateral_market_price) = get_prices_from_oracles(
-            liquidity.oracle,
-            collateral.oracle,
-            next_account_info(account_info_iter),
-            next_account_info(account_info_iter),
+            &liquidity.oracle,
+            &collateral.oracle,
+            liquidity_oracle_info,
+            collateral_oracle_info,
+            clock,
         )?;
 
         obligation.collateral_withdraw(amount)?;
@@ -773,6 +809,9 @@ impl Processor {
         let market_info = next_account_info(account_info_iter)?;
         let obligation_owner_info = next_account_info(account_info_iter)?;
         let market_authority_info = next_account_info(account_info_iter)?;
+        let liquidity_oracle_info = next_account_info(account_info_iter)?;
+        let collateral_oracle_info = next_account_info(account_info_iter)?;
+        let clock_info = next_account_info(account_info_iter)?;
         let _token_program_info = next_account_info(account_info_iter)?;
 
         if !obligation_owner_info.is_signer {
@@ -833,12 +872,14 @@ impl Processor {
             return Err(ProgramError::InvalidArgument);
         }
 
-        // Process optional oracles for market price, else returns 1
+        let clock = &Clock::from_account_info(clock_info)?;
+
         let (liquidity_market_price, collateral_market_price) = get_prices_from_oracles(
-            liquidity.oracle,
-            collateral.oracle,
-            next_account_info(account_info_iter),
-            next_account_info(account_info_iter),
+            &liquidity.oracle,
+            &collateral.oracle,
+            liquidity_oracle_info,
+            collateral_oracle_info,
+            clock,
         )?;
 
         obligation.liquidity_borrow(amount)?;
@@ -951,6 +992,9 @@ impl Processor {
         let market_info = next_account_info(account_info_iter)?;
         let user_transfer_authority_info = next_account_info(account_info_iter)?;
         let market_authority_info = next_account_info(account_info_iter)?;
+        let liquidity_oracle_info = next_account_info(account_info_iter)?;
+        let collateral_oracle_info = next_account_info(account_info_iter)?;
+        let clock_info = next_account_info(account_info_iter)?;
         let _token_program_info = next_account_info(account_info_iter)?;
 
         if !user_transfer_authority_info.is_signer {
@@ -1011,12 +1055,14 @@ impl Processor {
             return Err(ProgramError::InvalidArgument);
         }
 
-        // Process optional oracles for market price, else returns 1
+        let clock = &Clock::from_account_info(clock_info)?;
+
         let (liquidity_market_price, collateral_market_price) = get_prices_from_oracles(
-            liquidity.oracle,
-            collateral.oracle,
-            next_account_info(account_info_iter),
-            next_account_info(account_info_iter),
+            &liquidity.oracle,
+            &collateral.oracle,
+            liquidity_oracle_info,
+            collateral_oracle_info,
+            clock,
         )?;
 
         // 0. Check that we can liquidate
@@ -1280,41 +1326,60 @@ pub fn spl_token_burn<'a>(
     invoke_signed(&ix, &[mint, account, authority], signers_seeds)
 }
 
-/// Check oracle accounts & fetch prices from those accounts
-pub fn get_prices_from_oracles<'a>(
-    liquidity_oracle: Option<Pubkey>,
-    collateral_oracle: Option<Pubkey>,
-    liquidity_oracle_info: Result<&AccountInfo<'a>, ProgramError>,
-    collateral_oracle_info: Result<&AccountInfo<'a>, ProgramError>,
+/// Fetch prices from oracle accounts
+pub fn get_prices_from_oracles(
+    liquidity_oracle: &Pubkey,
+    collateral_oracle: &Pubkey,
+    liquidity_oracle_info: &AccountInfo,
+    collateral_oracle_info: &AccountInfo,
+    clock: &Clock,
 ) -> Result<(u64, u64), ProgramError> {
-    match (liquidity_oracle, collateral_oracle) {
-        (Some(liquidity_oracle), Some(collateral_oracle)) => {
-            match (liquidity_oracle_info, collateral_oracle_info) {
-                (Ok(liquidity_oracle_info), Ok(collateral_oracle_info)) => {
-                    if liquidity_oracle != *liquidity_oracle_info.key {
-                        return Err(LendingError::InvalidOracle.into());
-                    }
-
-                    if collateral_oracle != *collateral_oracle_info.key {
-                        return Err(LendingError::InvalidOracle.into());
-                    }
-
-                    let liquidity_market_price = read_median(liquidity_oracle_info)?.median;
-                    let collateral_market_price = read_median(collateral_oracle_info)?.median;
-
-                    msg!(
-                        "Market prices: {} {}",
-                        liquidity_market_price,
-                        collateral_market_price,
-                    );
-
-                    Ok((liquidity_market_price, collateral_market_price))
-                }
-                _ => return Err(ProgramError::InvalidArgument),
-            }
-        }
-        _ => Ok((1u64, 1u64)),
+    if liquidity_oracle != liquidity_oracle_info.key {
+        return Err(LendingError::InvalidOracle.into());
     }
+
+    if collateral_oracle != collateral_oracle_info.key {
+        return Err(LendingError::InvalidOracle.into());
+    }
+
+    let liquidity_market_price = get_pyth_price(liquidity_oracle_info, clock)?;
+    let collateral_market_price = get_pyth_price(collateral_oracle_info, clock)?;
+
+    msg!(
+        "Market prices: {} {}",
+        liquidity_market_price,
+        collateral_market_price,
+    );
+
+    Ok((liquidity_market_price, collateral_market_price))
+}
+
+fn get_pyth_price(pyth_price_info: &AccountInfo, clock: &Clock) -> Result<u64, ProgramError> {
+    const STALE_AFTER_SLOTS_ELAPSED: u64 = 5;
+
+    let pyth_price_data = pyth_price_info.try_borrow_data()?;
+    let pyth_price = pyth::load::<Price>(&pyth_price_data).unwrap();
+
+    if pyth_price.ptype != PriceType::Price {
+        msg!("Oracle price type is invalid");
+        return Err(LendingError::InvalidOracleConfig.into());
+    }
+
+    let slots_elapsed = clock
+        .slot
+        .checked_sub(pyth_price.valid_slot)
+        .ok_or(LendingError::MathOverflow)?;
+    if slots_elapsed >= STALE_AFTER_SLOTS_ELAPSED {
+        msg!("Oracle price is stale");
+        return Err(LendingError::InvalidOracleConfig.into());
+    }
+
+    let price: u64 = pyth_price.agg.price.try_into().map_err(|_| {
+        msg!("Oracle price cannot be negative");
+        LendingError::InvalidOracleConfig
+    })?;
+
+    Ok(price)
 }
 
 fn assert_rent_exempt(rent: &Rent, account_info: &AccountInfo) -> ProgramResult {
