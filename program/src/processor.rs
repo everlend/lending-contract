@@ -61,7 +61,11 @@ impl Processor {
     }
 
     /// Process CreateLiquidityToken instruction
-    pub fn create_liquidity_token(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
+    pub fn create_liquidity_token(
+        program_id: &Pubkey,
+        interest: u64,
+        accounts: &[AccountInfo],
+    ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let liquidity_info = next_account_info(account_info_iter)?;
         let token_mint_info = next_account_info(account_info_iter)?;
@@ -167,6 +171,7 @@ impl Processor {
             token_account: *token_account_info.key,
             pool_mint: *pool_mint_info.key,
             oracle: *oracle_price_info.key,
+            interest,
         });
         market.increase_liquidity_tokens();
 
@@ -524,8 +529,10 @@ impl Processor {
         let obligation_authority_info = next_account_info(account_info_iter)?;
         let obligation_owner_info = next_account_info(account_info_iter)?;
         let rent_info = next_account_info(account_info_iter)?;
+        let clock_info = next_account_info(account_info_iter)?;
         let _system_program_info = next_account_info(account_info_iter)?;
         let rent = &Rent::from_account_info(rent_info)?;
+        let clock = &Clock::from_account_info(clock_info)?;
 
         if !obligation_owner_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature);
@@ -610,6 +617,7 @@ impl Processor {
             owner: *obligation_owner_info.key,
             liquidity: *liquidity_info.key,
             collateral: *collateral_info.key,
+            interest_slot: clock.slot,
         });
 
         Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
@@ -813,6 +821,7 @@ impl Processor {
         let collateral_oracle_info = next_account_info(account_info_iter)?;
         let clock_info = next_account_info(account_info_iter)?;
         let _token_program_info = next_account_info(account_info_iter)?;
+        let clock = &Clock::from_account_info(clock_info)?;
 
         if !obligation_owner_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature);
@@ -872,8 +881,6 @@ impl Processor {
             return Err(ProgramError::InvalidArgument);
         }
 
-        let clock = &Clock::from_account_info(clock_info)?;
-
         let (liquidity_market_price, collateral_market_price) = get_prices_from_oracles(
             &liquidity.oracle,
             &collateral.oracle,
@@ -881,6 +888,9 @@ impl Processor {
             collateral_oracle_info,
             clock,
         )?;
+
+        obligation.update_interest_amount(clock.slot, liquidity.interest)?;
+        obligation.update_slot(clock.slot);
 
         obligation.liquidity_borrow(amount)?;
         liquidity.borrow(amount)?;
@@ -918,7 +928,9 @@ impl Processor {
         let liquidity_token_account_info = next_account_info(account_info_iter)?;
         let market_info = next_account_info(account_info_iter)?;
         let user_transfer_authority_info = next_account_info(account_info_iter)?;
+        let clock_info = next_account_info(account_info_iter)?;
         let _token_program_info = next_account_info(account_info_iter)?;
+        let clock = &Clock::from_account_info(clock_info)?;
 
         if market_info.owner != program_id {
             msg!("Market provided is not owned by the market program");
@@ -961,6 +973,10 @@ impl Processor {
             msg!("Repay limit exceeded");
             return Err(ProgramError::InvalidArgument);
         }
+
+        obligation.update_interest_amount(clock.slot, liquidity.interest)?;
+        obligation.update_slot(clock.slot);
+
         obligation.liquidity_repay(amount)?;
         liquidity.repay(amount)?;
 
@@ -1121,9 +1137,9 @@ impl Processor {
                 Self::init_market(program_id, accounts)
             }
 
-            LendingInstruction::CreateLiquidityToken => {
+            LendingInstruction::CreateLiquidityToken { interest } => {
                 msg!("LendingInstruction: CreateLiquidityToken");
-                Self::create_liquidity_token(program_id, accounts)
+                Self::create_liquidity_token(program_id, interest, accounts)
             }
 
             LendingInstruction::UpdateLiquidityToken { status } => {

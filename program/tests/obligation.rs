@@ -4,7 +4,7 @@ mod utils;
 
 use everlend_lending::{
     error::LendingError,
-    state::{CollateralStatus, LiquidityStatus, PROGRAM_VERSION, RATIO_POWER},
+    state::{CollateralStatus, LiquidityStatus, INTEREST_POWER, PROGRAM_VERSION, RATIO_POWER},
 };
 use solana_program::instruction::InstructionError;
 use solana_program_test::*;
@@ -399,6 +399,9 @@ async fn success_liquidity_repay() {
         borrow_ammount
     );
 
+    // Move slot for interest
+    context.warp_to_slot(5).unwrap();
+
     obligation_info
         .liquidity_repay(
             &mut context,
@@ -410,18 +413,16 @@ async fn success_liquidity_repay() {
         .await
         .unwrap();
 
-    assert_eq!(
-        obligation_info
-            .get_data(&mut context)
-            .await
-            .amount_liquidity_borrowed,
-        0
-    );
+    let obligation = obligation_info.get_data(&mut context).await;
+    let liquidity = liquidity_info.get_data(&mut context).await;
 
     assert_eq!(
-        liquidity_info.get_data(&mut context).await.amount_borrowed,
-        0
+        obligation.interest_amount,
+        borrow_ammount * (5 - 1) * liquidity.interest / INTEREST_POWER
     );
+
+    assert_eq!(obligation.amount_liquidity_borrowed, 0);
+    assert_eq!(liquidity.amount_borrowed, 0);
 
     assert_eq!(
         get_token_balance(&mut context, &borrower_liquidity.pubkey()).await,

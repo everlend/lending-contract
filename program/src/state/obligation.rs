@@ -4,6 +4,7 @@ use crate::error::LendingError;
 use super::*;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use solana_program::{
+    clock::Slot,
     entrypoint::ProgramResult,
     msg,
     program_error::ProgramError,
@@ -29,6 +30,10 @@ pub struct Obligation {
     pub amount_liquidity_borrowed: u64,
     /// Amount of deposited collateral
     pub amount_collateral_deposited: u64,
+    /// Interest amount
+    pub interest_amount: u64,
+    /// Interest slot
+    pub interest_slot: Slot,
 }
 
 impl Obligation {
@@ -41,6 +46,8 @@ impl Obligation {
         self.collateral = params.collateral;
         self.amount_liquidity_borrowed = 0;
         self.amount_collateral_deposited = 0;
+        self.interest_amount = 0;
+        self.interest_slot = params.interest_slot;
     }
 
     /// Increase amount of deposited collateral
@@ -81,6 +88,33 @@ impl Obligation {
             .ok_or(LendingError::CalculationFailure)?;
 
         Ok(())
+    }
+
+    /// Update intereset per each borrow
+    pub fn update_interest_amount(&mut self, slot: Slot, interest: u64) -> ProgramResult {
+        let slot_offset = slot
+            .checked_sub(self.interest_slot)
+            .ok_or(LendingError::CalculationFailure)?;
+
+        let pending = (self.amount_liquidity_borrowed as u128)
+            .checked_mul(slot_offset as u128)
+            .ok_or(LendingError::CalculationFailure)?
+            .checked_mul(interest as u128)
+            .ok_or(LendingError::CalculationFailure)?
+            .checked_div(INTEREST_POWER as u128)
+            .ok_or(LendingError::CalculationFailure)? as u64;
+
+        self.interest_amount = self
+            .interest_amount
+            .checked_add(pending)
+            .ok_or(LendingError::CalculationFailure)?;
+
+        Ok(())
+    }
+
+    /// Update slot to last
+    pub fn update_slot(&mut self, slot: Slot) {
+        self.interest_slot = slot;
     }
 
     /// Calculate obligation ratio
@@ -147,8 +181,8 @@ impl Obligation {
 
 impl Sealed for Obligation {}
 impl Pack for Obligation {
-    // 1 + 32 + 32 + 32 + 32 + 8 + 8
-    const LEN: usize = 145;
+    // 1 + 32 + 32 + 32 + 32 + 8 + 8 + 8 + 8
+    const LEN: usize = 161;
 
     fn pack_into_slice(&self, dst: &mut [u8]) {
         let mut slice = dst;
@@ -173,6 +207,8 @@ pub struct InitObligationParams {
     pub liquidity: Pubkey,
     /// Collateral
     pub collateral: Pubkey,
+    /// Interest slot
+    pub interest_slot: Slot,
 }
 
 impl IsInitialized for Obligation {

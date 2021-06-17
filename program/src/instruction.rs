@@ -37,7 +37,10 @@ pub enum LendingInstruction {
     /// [R] Sytem program
     /// [R] Token program id
     /// [R] Oracle state account pubkey - optional
-    CreateLiquidityToken,
+    CreateLiquidityToken {
+        /// Interest (10e12 precision)
+        interest: u64,
+    },
 
     /// Update liquidity token
     ///
@@ -245,6 +248,7 @@ pub fn init_market(
 /// Create `CreateLiquidityToken` instruction
 pub fn create_liquidity_token(
     program_id: &Pubkey,
+    interest: u64,
     liquidity: &Pubkey,
     token_mint: &Pubkey,
     token_account: &Pubkey,
@@ -254,7 +258,7 @@ pub fn create_liquidity_token(
     oracle_product: &Pubkey,
     oracle_price: &Pubkey,
 ) -> Result<Instruction, ProgramError> {
-    let init_data = LendingInstruction::CreateLiquidityToken;
+    let init_data = LendingInstruction::CreateLiquidityToken { interest };
     let data = init_data.try_to_vec()?;
     let (market_authority, _) = find_program_address(program_id, market);
 
@@ -470,6 +474,7 @@ pub fn create_obligation(
         AccountMeta::new_readonly(obligation_authority, false),
         AccountMeta::new_readonly(*owner, true),
         AccountMeta::new_readonly(sysvar::rent::id(), false),
+        AccountMeta::new_readonly(sysvar::clock::id(), false),
         AccountMeta::new_readonly(system_program::id(), false),
     ];
 
@@ -616,6 +621,7 @@ pub fn obligation_liquidity_repay(
         AccountMeta::new(*liquidity_token_account, false),
         AccountMeta::new_readonly(*market, false),
         AccountMeta::new_readonly(*user_transfer_authority, true),
+        AccountMeta::new_readonly(sysvar::clock::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
     ];
 

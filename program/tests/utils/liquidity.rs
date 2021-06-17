@@ -1,7 +1,7 @@
 use super::{get_account, market::MarketInfo, oracle::TestOracle};
 use everlend_lending::{
     find_program_address, id, instruction,
-    state::{Liquidity, LiquidityStatus},
+    state::{Liquidity, LiquidityStatus, INTEREST_POWER},
 };
 use solana_program::{program_pack::Pack, pubkey::Pubkey, system_instruction};
 use solana_program_test::ProgramTestContext;
@@ -10,6 +10,8 @@ use solana_sdk::{
     transaction::Transaction,
     transport,
 };
+
+pub const INTEREST: u64 = 20 * INTEREST_POWER / 100; // 0.5 * 10^9
 
 #[derive(Debug)]
 pub struct LiquidityInfo {
@@ -71,6 +73,7 @@ impl LiquidityInfo {
                 ),
                 instruction::create_liquidity_token(
                     &id(),
+                    INTEREST,
                     &self.liquidity_pubkey,
                     &self.token_mint.pubkey(),
                     &self.token_account.pubkey(),
