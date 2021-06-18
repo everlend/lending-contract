@@ -4,7 +4,7 @@ mod utils;
 
 use everlend_lending::{
     error::LendingError,
-    state::{CollateralStatus, LiquidityStatus, INTEREST_POWER, PROGRAM_VERSION, RATIO_POWER},
+    state::{CollateralStatus, LiquidityStatus, PROGRAM_VERSION, RATIO_POWER},
 };
 use solana_program::instruction::InstructionError;
 use solana_program_test::*;
@@ -304,7 +304,7 @@ async fn success_liquidity_borrow() {
     )
     .await;
 
-    // Deposit collateral
+    // 0. Deposit collateral
     obligation_info
         .collateral_deposit(
             &mut context,
@@ -316,15 +316,24 @@ async fn success_liquidity_borrow() {
         .await
         .unwrap();
 
-    let borrow_ammount = DEPOSIT_AMOUNT * collateral::RATIO_INITIAL / RATIO_POWER;
-    println!("Borrow amount: {}", borrow_ammount);
+    // 1. Borrow liquidity
+    let borrow_amount = obligation_info
+        .get_data(&mut context)
+        .await
+        .calc_borrowing_limit(
+            collateral::RATIO_INITIAL,
+            SOL_PRICE as u64,
+            SRM_PRICE as u64,
+        )
+        .unwrap();
+    println!("Borrow amount: {}", borrow_amount);
     obligation_info
         .liquidity_borrow(
             &mut context,
             &market_info,
             &liquidity_info,
             &collateral_info,
-            borrow_ammount,
+            borrow_amount,
             &borrower_liquidity.pubkey(),
         )
         .await
@@ -335,17 +344,17 @@ async fn success_liquidity_borrow() {
             .get_data(&mut context)
             .await
             .amount_liquidity_borrowed,
-        borrow_ammount
+        borrow_amount
     );
 
     assert_eq!(
         liquidity_info.get_data(&mut context).await.amount_borrowed,
-        borrow_ammount
+        borrow_amount
     );
 
     assert_eq!(
         get_token_balance(&mut context, &borrower_liquidity.pubkey()).await,
-        borrow_ammount
+        borrow_amount
     );
 }
 
@@ -375,15 +384,24 @@ async fn success_liquidity_repay() {
         .await
         .unwrap();
 
-    let borrow_ammount = DEPOSIT_AMOUNT * collateral::RATIO_INITIAL / RATIO_POWER;
-    println!("Borrow amount: {}", borrow_ammount);
+    // 1. Borrow liquidity
+    let borrow_amount = obligation_info
+        .get_data(&mut context)
+        .await
+        .calc_borrowing_limit(
+            collateral::RATIO_INITIAL,
+            SOL_PRICE as u64,
+            SRM_PRICE as u64,
+        )
+        .unwrap();
+    println!("Borrow amount: {}", borrow_amount);
     obligation_info
         .liquidity_borrow(
             &mut context,
             &market_info,
             &liquidity_info,
             &collateral_info,
-            borrow_ammount,
+            borrow_amount,
             &borrower_liquidity.pubkey(),
         )
         .await
@@ -391,23 +409,29 @@ async fn success_liquidity_repay() {
 
     assert_eq!(
         get_token_balance(&mut context, &borrower_liquidity.pubkey()).await,
-        borrow_ammount
+        borrow_amount
     );
 
     assert_eq!(
         liquidity_info.get_data(&mut context).await.amount_borrowed,
-        borrow_ammount
+        borrow_amount
     );
 
     // Move slot for interest
     context.warp_to_slot(5).unwrap();
+
+    let effective_interest = obligation_info
+        .get_data(&mut context)
+        .await
+        .calc_effective_interest_amount(5, liquidity::INTEREST)
+        .unwrap();
 
     obligation_info
         .liquidity_repay(
             &mut context,
             &market_info,
             &liquidity_info,
-            borrow_ammount,
+            borrow_amount,
             &borrower_liquidity.pubkey(),
         )
         .await
@@ -416,13 +440,9 @@ async fn success_liquidity_repay() {
     let obligation = obligation_info.get_data(&mut context).await;
     let liquidity = liquidity_info.get_data(&mut context).await;
 
-    assert_eq!(
-        obligation.interest_amount,
-        borrow_ammount * (5 - 1) * liquidity.interest / INTEREST_POWER
-    );
-
-    assert_eq!(obligation.amount_liquidity_borrowed, 0);
-    assert_eq!(liquidity.amount_borrowed, 0);
+    assert_eq!(obligation.interest_amount, 0);
+    assert_eq!(obligation.amount_liquidity_borrowed, effective_interest);
+    assert_eq!(liquidity.amount_borrowed, effective_interest);
 
     assert_eq!(
         get_token_balance(&mut context, &borrower_liquidity.pubkey()).await,
@@ -442,7 +462,7 @@ async fn success_liquidate() {
     )
     .await;
 
-    // Deposit
+    // 0. Deposit
     const DEPOSIT_AMOUNT: u64 = 10000;
     obligation_info
         .collateral_deposit(
@@ -455,15 +475,23 @@ async fn success_liquidate() {
         .await
         .unwrap();
 
-    // Borrow
-    let borrow_ammount = DEPOSIT_AMOUNT * collateral::RATIO_INITIAL / RATIO_POWER;
+    // 1. Borrow liquidity
+    let borrow_amount = obligation_info
+        .get_data(&mut context)
+        .await
+        .calc_borrowing_limit(
+            collateral::RATIO_INITIAL,
+            SOL_PRICE as u64,
+            SRM_PRICE as u64,
+        )
+        .unwrap();
     obligation_info
         .liquidity_borrow(
             &mut context,
             &market_info,
             &liquidity_info,
             &collateral_info,
-            borrow_ammount,
+            borrow_amount,
             &borrower_liquidity.pubkey(),
         )
         .await
@@ -471,7 +499,7 @@ async fn success_liquidate() {
 
     // TODO: We gonna update ratio healthy for collateral token. Fix it to changing oracle market price.
     const NEW_RATIO_INITIAL: u64 = 50 * RATIO_POWER / 100;
-    const NEW_RATIO_HEALTHY: u64 = 40 * RATIO_POWER / 100;
+    const NEW_RATIO_HEALTHY: u64 = 40 * RATIO_POWER * SOL_PRICE as u64 / SRM_PRICE as u64 / 100;
     collateral_info
         .update(
             &mut context,

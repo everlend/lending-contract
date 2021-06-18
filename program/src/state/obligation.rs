@@ -90,8 +90,13 @@ impl Obligation {
         Ok(())
     }
 
-    /// Update intereset per each borrow
-    pub fn update_interest_amount(&mut self, slot: Slot, interest: u64) -> ProgramResult {
+    /// Calc pending interest amount
+    /// borrowed * (current_slot - interest_slot) * interest
+    pub fn calc_pending_interest_amount(
+        &self,
+        slot: Slot,
+        interest: u64,
+    ) -> Result<u64, ProgramError> {
         let slot_offset = slot
             .checked_sub(self.interest_slot)
             .ok_or(LendingError::CalculationFailure)?;
@@ -104,12 +109,27 @@ impl Obligation {
             .checked_div(INTEREST_POWER as u128)
             .ok_or(LendingError::CalculationFailure)? as u64;
 
-        self.interest_amount = self
+        Ok(pending)
+    }
+
+    /// Calc effective interest amount
+    /// interest_amount + borrowed * (current_slot - interest_slot) * interest
+    pub fn calc_effective_interest_amount(
+        &self,
+        slot: Slot,
+        interest: u64,
+    ) -> Result<u64, ProgramError> {
+        let amount = self
             .interest_amount
-            .checked_add(pending)
+            .checked_add(self.calc_pending_interest_amount(slot, interest)?)
             .ok_or(LendingError::CalculationFailure)?;
 
-        Ok(())
+        Ok(amount)
+    }
+
+    /// Update intereset per each borrow
+    pub fn update_interest_amount(&mut self, amount: u64) {
+        self.interest_amount = amount;
     }
 
     /// Update slot to last
@@ -147,33 +167,53 @@ impl Obligation {
     }
 
     /// Calculation of available funds for withdrawal
-    pub fn calc_withdrawal_limit(&self, ratio_initial: u64) -> Result<u64, ProgramError> {
+    pub fn calc_withdrawal_limit(
+        &self,
+        ratio_initial: u64,
+        liquidity_market_price: u64,
+        collateral_market_price: u64,
+    ) -> Result<u64, ProgramError> {
+        let liquidity_value = (self.amount_liquidity_borrowed as u128)
+            .checked_mul(liquidity_market_price as u128)
+            .ok_or(LendingError::CalculationFailure)?;
+
         // deposited - borrowed / ratio_initial
-        let result = self
-            .amount_collateral_deposited
+        let result = (self.amount_collateral_deposited as u128)
             .checked_sub(
-                self.amount_liquidity_borrowed
-                    .checked_mul(RATIO_POWER)
+                liquidity_value
+                    .checked_mul(RATIO_POWER as u128)
                     .ok_or(LendingError::CalculationFailure)?
-                    .checked_div(ratio_initial)
+                    .checked_div(ratio_initial as u128)
+                    .ok_or(LendingError::CalculationFailure)?
+                    .checked_div(collateral_market_price as u128)
                     .ok_or(LendingError::CalculationFailure)?,
             )
-            .ok_or(LendingError::CalculationFailure)?;
+            .ok_or(LendingError::CalculationFailure)? as u64;
 
         Ok(result)
     }
 
     /// Calculation of available funds for borrowing
-    pub fn calc_borrowing_limit(&self, ratio_initial: u64) -> Result<u64, ProgramError> {
-        // deposited * ratio_initial - borrowed
-        let result = self
-            .amount_collateral_deposited
-            .checked_mul(ratio_initial)
-            .ok_or(LendingError::CalculationFailure)?
-            .checked_div(RATIO_POWER)
-            .ok_or(LendingError::CalculationFailure)?
-            .checked_sub(self.amount_liquidity_borrowed)
+    pub fn calc_borrowing_limit(
+        &self,
+        ratio_initial: u64,
+        liquidity_market_price: u64,
+        collateral_market_price: u64,
+    ) -> Result<u64, ProgramError> {
+        let collateral_value = (self.amount_collateral_deposited as u128)
+            .checked_mul(collateral_market_price as u128)
             .ok_or(LendingError::CalculationFailure)?;
+
+        // deposited * ratio_initial - borrowed
+        let result = collateral_value
+            .checked_mul(ratio_initial as u128)
+            .ok_or(LendingError::CalculationFailure)?
+            .checked_div(RATIO_POWER as u128)
+            .ok_or(LendingError::CalculationFailure)?
+            .checked_div(liquidity_market_price as u128)
+            .ok_or(LendingError::CalculationFailure)?
+            .checked_sub(self.amount_liquidity_borrowed as u128)
+            .ok_or(LendingError::CalculationFailure)? as u64;
 
         Ok(result)
     }

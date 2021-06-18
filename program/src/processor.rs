@@ -889,7 +889,9 @@ impl Processor {
             clock,
         )?;
 
-        obligation.update_interest_amount(clock.slot, liquidity.interest)?;
+        let effective_interest =
+            obligation.calc_effective_interest_amount(clock.slot, liquidity.interest)?;
+        obligation.update_interest_amount(effective_interest);
         obligation.update_slot(clock.slot);
 
         obligation.liquidity_borrow(amount)?;
@@ -968,17 +970,24 @@ impl Processor {
             return Err(ProgramError::InvalidArgument);
         }
 
+        let effective_interest =
+            obligation.calc_effective_interest_amount(clock.slot, liquidity.interest)?;
+        msg!("effective_interest: {}", effective_interest);
+
+        // 0. First we repay effective interest
+        obligation.update_interest_amount(effective_interest.checked_sub(amount).unwrap_or(0));
+        obligation.update_slot(clock.slot);
+
+        // 1. And then we repay borrowed liquidity
+        let repay_amount = amount.checked_sub(effective_interest).unwrap_or(0);
         let repay_limit = obligation.amount_liquidity_borrowed;
-        if amount > repay_limit {
+        if repay_amount > repay_limit {
             msg!("Repay limit exceeded");
             return Err(ProgramError::InvalidArgument);
         }
 
-        obligation.update_interest_amount(clock.slot, liquidity.interest)?;
-        obligation.update_slot(clock.slot);
-
-        obligation.liquidity_repay(amount)?;
-        liquidity.repay(amount)?;
+        obligation.liquidity_repay(repay_amount)?;
+        liquidity.repay(repay_amount)?;
 
         Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
         Liquidity::pack(liquidity, *liquidity_info.data.borrow_mut())?;

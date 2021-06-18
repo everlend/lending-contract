@@ -36,7 +36,7 @@ pub enum LendingInstruction {
     /// [R] Rent sysvar
     /// [R] Sytem program
     /// [R] Token program id
-    /// [R] Oracle state account pubkey - optional
+    /// [R] Oracle state account pubkey
     CreateLiquidityToken {
         /// Interest (10e12 precision)
         interest: u64,
@@ -65,7 +65,7 @@ pub enum LendingInstruction {
     /// [R] Rent sysvar
     /// [R] Sytem program
     /// [R] Token program id
-    /// [R] Oracle state account pubkey - optional
+    /// [R] Oracle state account pubkey
     CreateCollateralToken {
         /// Fractional initial collateralization ratio (multiplied by 10e9)
         ratio_initial: u64,
@@ -132,8 +132,8 @@ pub enum LendingInstruction {
     /// [R] Obligation authority (owner/market/liquidity/collateral combination)
     /// [RS] Obligation owner
     /// [R] Rent sysvar
+    /// [R] Clock
     /// [R] Sytem program
-    /// [R] Token program id
     CreateObligation,
 
     /// Deposit collateral token to obligation
@@ -162,9 +162,10 @@ pub enum LendingInstruction {
     /// [R] Market account
     /// [RS] Obligation owner
     /// [R] Market authority
+    /// [R] Liquidity oracle state account pubkey
+    /// [R] Collateral oracle state account pubkey
+    /// [R] Clock
     /// [R] Token program id
-    /// [R] Liquidity oracle state account pubkey - optional
-    /// [R] Collateral oracle state account pubkey - optional
     ObligationCollateralWithdraw {
         /// Amount of collateral to withdraw
         amount: u64,
@@ -181,9 +182,10 @@ pub enum LendingInstruction {
     /// [R] Market account
     /// [RS] Obligation owner
     /// [R] Market authority
-    /// [R] Token program id
     /// [R] Liquidity oracle state account pubkey
     /// [R] Collateral oracle state account pubkey
+    /// [R] Clock
+    /// [R] Token program id
     ObligationLiquidityBorrow {
         /// Amount of liquidity to borrow
         amount: u64,
@@ -198,6 +200,7 @@ pub enum LendingInstruction {
     /// [W] Liquidity token account
     /// [R] Market account
     /// [RS] User transfer authority
+    /// [R] Clock
     /// [R] Token program id
     ObligationLiquidityRepay {
         /// Amount of liquidity to repay
@@ -217,9 +220,10 @@ pub enum LendingInstruction {
     /// [R] Market account
     /// [RS] User transfer authority
     /// [R] Market authority
-    /// [R] Token program id
     /// [R] Liquidity oracle state account pubkey
     /// [R] Collateral oracle state account pubkey
+    /// [R] Clock
+    /// [R] Token program id
     LiquidateObligation,
 }
 

@@ -11,7 +11,7 @@ use solana_sdk::{
     transport,
 };
 
-pub const INTEREST: u64 = 20 * INTEREST_POWER / 100; // 0.5 * 10^9
+pub const INTEREST: u64 = 1 * INTEREST_POWER / 100; // 1% per slot
 
 #[derive(Debug)]
 pub struct LiquidityInfo {

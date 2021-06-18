@@ -31,6 +31,9 @@ pub const SOL_PYTH_PRICE: &str = "BdgHsXrH1mXqhdosXavYxZgX6bGqTdj5mh2sxDhF8bJy";
 pub const SRM_PYTH_PRODUCT: &str = "5agdsn3jogTt8F537GW3g8BuLaBGrg9Q2gPKUNqBV6Dh";
 pub const SRM_PYTH_PRICE: &str = "2Mt2wcRXpCAbTRp2VjFqGa8SbJVzjJvyK4Tx7aqbRtBJ";
 
+pub const SOL_PRICE: i64 = 10000;
+pub const SRM_PRICE: i64 = 20000;
+
 pub fn program_test() -> ProgramTest {
     ProgramTest::new(
         "everlend_lending",
@@ -151,7 +154,7 @@ pub fn add_sol_oracle(test: &mut ProgramTest) -> TestOracle {
     let oracle = TestOracle::new(
         &Pubkey::from_str(SOL_PYTH_PRODUCT).unwrap(),
         &Pubkey::from_str(SOL_PYTH_PRICE).unwrap(),
-        10000,
+        SOL_PRICE,
     );
     oracle.init(test);
 
@@ -162,7 +165,7 @@ pub fn add_srm_oracle(test: &mut ProgramTest) -> TestOracle {
     let oracle = TestOracle::new(
         &Pubkey::from_str(SRM_PYTH_PRODUCT).unwrap(),
         &Pubkey::from_str(SRM_PYTH_PRICE).unwrap(),
-        20000,
+        SRM_PRICE,
     );
     oracle.init(test);
 
