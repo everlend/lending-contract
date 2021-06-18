@@ -6,18 +6,20 @@ use everlend_lending::state::{CollateralStatus, RATIO_POWER};
 use solana_program_test::*;
 use utils::*;
 
-async fn setup() -> (ProgramTestContext, MarketInfo) {
-    let mut context = program_test().start_with_context().await;
+async fn setup() -> (ProgramTestContext, MarketInfo, TestOracle) {
+    let mut test = program_test();
+    let srm_oracle = add_srm_oracle(&mut test);
+    let mut context = test.start_with_context().await;
 
     let market_info = MarketInfo::new();
     market_info.init(&mut context).await.unwrap();
 
-    (context, market_info)
+    (context, market_info, srm_oracle)
 }
 
 #[tokio::test]
 async fn success() {
-    let (mut context, market_info) = setup().await;
+    let (mut context, market_info, oracle) = setup().await;
 
     assert_eq!(
         market_info.get_data(&mut context).await.collateral_tokens,
@@ -25,7 +27,7 @@ async fn success() {
     );
 
     let collateral_info = market_info
-        .create_collateral_token(&mut context)
+        .create_collateral_token(&mut context, &oracle)
         .await
         .unwrap();
 
@@ -40,16 +42,16 @@ async fn success() {
 }
 
 #[tokio::test]
-async fn two_tokens() {
-    let (mut context, market_info) = setup().await;
+async fn success_two_tokens() {
+    let (mut context, market_info, oracle) = setup().await;
 
     market_info
-        .create_collateral_token(&mut context)
+        .create_collateral_token(&mut context, &oracle)
         .await
         .unwrap();
 
     market_info
-        .create_collateral_token(&mut context)
+        .create_collateral_token(&mut context, &oracle)
         .await
         .unwrap();
 
@@ -60,11 +62,11 @@ async fn two_tokens() {
 }
 
 #[tokio::test]
-async fn update_token() {
-    let (mut context, market_info) = setup().await;
+async fn success_update_token() {
+    let (mut context, market_info, oracle) = setup().await;
 
     let collateral_info = market_info
-        .create_collateral_token(&mut context)
+        .create_collateral_token(&mut context, &oracle)
         .await
         .unwrap();
 

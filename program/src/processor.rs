@@ -1,16 +1,23 @@
 //! Program state processor
 
-use crate::{error::LendingError, instruction::LendingInstruction};
-use crate::{find_obligation_authority, find_program_address, state::*};
+use std::convert::TryInto;
+
+use crate::{
+    error::LendingError,
+    find_obligation_authority, find_program_address,
+    instruction::LendingInstruction,
+    pyth::{self, Price, PriceType, Product},
+    state::*,
+};
 use borsh::BorshDeserialize;
-use solana_program::program_pack::IsInitialized;
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
+    clock::Clock,
     entrypoint::ProgramResult,
     msg,
     program::{invoke, invoke_signed},
     program_error::ProgramError,
-    program_pack::Pack,
+    program_pack::{IsInitialized, Pack},
     pubkey::Pubkey,
     rent::Rent,
     system_instruction,
@@ -54,7 +61,11 @@ impl Processor {
     }
 
     /// Process CreateLiquidityToken instruction
-    pub fn create_liquidity_token(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
+    pub fn create_liquidity_token(
+        program_id: &Pubkey,
+        interest: u64,
+        accounts: &[AccountInfo],
+    ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let liquidity_info = next_account_info(account_info_iter)?;
         let token_mint_info = next_account_info(account_info_iter)?;
@@ -63,6 +74,8 @@ impl Processor {
         let market_info = next_account_info(account_info_iter)?;
         let market_owner_info = next_account_info(account_info_iter)?;
         let market_authority_info = next_account_info(account_info_iter)?;
+        let oracle_product_info = next_account_info(account_info_iter)?;
+        let oracle_price_info = next_account_info(account_info_iter)?;
         let rent_info = next_account_info(account_info_iter)?;
         let _system_program_info = next_account_info(account_info_iter)?;
         let _token_program_info = next_account_info(account_info_iter)?;
@@ -107,6 +120,34 @@ impl Processor {
 
         let token_mint = Mint::unpack(&token_mint_info.data.borrow())?;
 
+        let oracle_product_data = oracle_product_info.try_borrow_data()?;
+        let oracle_product = pyth::load::<Product>(&oracle_product_data)
+            .map_err(|_| ProgramError::InvalidAccountData)?;
+
+        if oracle_product.magic != pyth::MAGIC {
+            msg!("Pyth product account provided is not a valid Pyth account");
+            return Err(LendingError::InvalidOracleConfig.into());
+        }
+        if oracle_product.ver != pyth::VERSION_1 {
+            msg!("Pyth product account provided has a different version than expected");
+            return Err(LendingError::InvalidOracleConfig.into());
+        }
+        if oracle_product.atype != pyth::AccountType::Product as u32 {
+            msg!("Pyth product account provided is not a valid Pyth product account");
+            return Err(LendingError::InvalidOracleConfig.into());
+        }
+
+        let oracle_price_pubkey_bytes: &[u8; 32] = oracle_price_info
+            .key
+            .as_ref()
+            .try_into()
+            .map_err(|_| ProgramError::InvalidArgument)?;
+
+        if &oracle_product.px_acc.val != oracle_price_pubkey_bytes {
+            msg!("Pyth product price account does not match the Pyth price provided");
+            return Err(LendingError::InvalidOracleConfig.into());
+        }
+
         // Initialize token account for spl token
         spl_initialize_account(
             token_account_info.clone(),
@@ -129,6 +170,8 @@ impl Processor {
             token_mint: *token_mint_info.key,
             token_account: *token_account_info.key,
             pool_mint: *pool_mint_info.key,
+            oracle: *oracle_price_info.key,
+            interest,
         });
         market.increase_liquidity_tokens();
 
@@ -191,6 +234,8 @@ impl Processor {
         let market_info = next_account_info(account_info_iter)?;
         let market_owner_info = next_account_info(account_info_iter)?;
         let market_authority_info = next_account_info(account_info_iter)?;
+        let oracle_product_info = next_account_info(account_info_iter)?;
+        let oracle_price_info = next_account_info(account_info_iter)?;
         let rent_info = next_account_info(account_info_iter)?;
         let _system_program_info = next_account_info(account_info_iter)?;
         let _token_program_info = next_account_info(account_info_iter)?;
@@ -233,6 +278,34 @@ impl Processor {
         let mut collateral = Collateral::unpack_unchecked(&collateral_info.data.borrow())?;
         assert_uninitialized(&collateral)?;
 
+        let oracle_product_data = oracle_product_info.try_borrow_data()?;
+        let oracle_product = pyth::load::<Product>(&oracle_product_data)
+            .map_err(|_| ProgramError::InvalidAccountData)?;
+
+        if oracle_product.magic != pyth::MAGIC {
+            msg!("Pyth product account provided is not a valid Pyth account");
+            return Err(LendingError::InvalidOracleConfig.into());
+        }
+        if oracle_product.ver != pyth::VERSION_1 {
+            msg!("Pyth product account provided has a different version than expected");
+            return Err(LendingError::InvalidOracleConfig.into());
+        }
+        if oracle_product.atype != pyth::AccountType::Product as u32 {
+            msg!("Pyth product account provided is not a valid Pyth product account");
+            return Err(LendingError::InvalidOracleConfig.into());
+        }
+
+        let oracle_price_pubkey_bytes: &[u8; 32] = oracle_price_info
+            .key
+            .as_ref()
+            .try_into()
+            .map_err(|_| ProgramError::InvalidArgument)?;
+
+        if &oracle_product.px_acc.val != oracle_price_pubkey_bytes {
+            msg!("Pyth product price account does not match the Pyth price provided");
+            return Err(LendingError::InvalidOracleConfig.into());
+        }
+
         // Initialize token account for spl token
         spl_initialize_account(
             token_account_info.clone(),
@@ -248,6 +321,7 @@ impl Processor {
             token_account: *token_account_info.key,
             ratio_initial,
             ratio_healthy,
+            oracle: *oracle_price_info.key,
         });
         market.increase_collateral_tokens();
 
@@ -455,8 +529,10 @@ impl Processor {
         let obligation_authority_info = next_account_info(account_info_iter)?;
         let obligation_owner_info = next_account_info(account_info_iter)?;
         let rent_info = next_account_info(account_info_iter)?;
+        let clock_info = next_account_info(account_info_iter)?;
         let _system_program_info = next_account_info(account_info_iter)?;
         let rent = &Rent::from_account_info(rent_info)?;
+        let clock = &Clock::from_account_info(clock_info)?;
 
         if !obligation_owner_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature);
@@ -541,6 +617,7 @@ impl Processor {
             owner: *obligation_owner_info.key,
             liquidity: *liquidity_info.key,
             collateral: *collateral_info.key,
+            interest_slot: clock.slot,
         });
 
         Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
@@ -622,12 +699,16 @@ impl Processor {
     ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let obligation_info = next_account_info(account_info_iter)?;
+        let liquidity_info = next_account_info(account_info_iter)?;
         let collateral_info = next_account_info(account_info_iter)?;
         let destination_info = next_account_info(account_info_iter)?;
         let collateral_token_account_info = next_account_info(account_info_iter)?;
         let market_info = next_account_info(account_info_iter)?;
         let obligation_owner_info = next_account_info(account_info_iter)?;
         let market_authority_info = next_account_info(account_info_iter)?;
+        let liquidity_oracle_info = next_account_info(account_info_iter)?;
+        let collateral_oracle_info = next_account_info(account_info_iter)?;
+        let clock_info = next_account_info(account_info_iter)?;
         let _token_program_info = next_account_info(account_info_iter)?;
 
         if !obligation_owner_info.is_signer {
@@ -636,6 +717,11 @@ impl Processor {
 
         if market_info.owner != program_id {
             msg!("Market provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
+        if liquidity_info.owner != program_id {
+            msg!("Liquidity provided is not owned by the market program");
             return Err(LendingError::InvalidAccountOwner.into());
         }
 
@@ -657,6 +743,11 @@ impl Processor {
             return Err(ProgramError::InvalidArgument);
         }
 
+        if obligation.liquidity != *liquidity_info.key {
+            msg!("Obligation liquidity does not match the liquidity provided");
+            return Err(ProgramError::InvalidArgument);
+        }
+
         if obligation.collateral != *collateral_info.key {
             msg!("Obligation collateral does not match the collateral provided");
             return Err(ProgramError::InvalidArgument);
@@ -667,6 +758,9 @@ impl Processor {
             return Err(ProgramError::InvalidArgument);
         }
 
+        // Get liquidity state
+        let liquidity = Liquidity::unpack(&liquidity_info.data.borrow())?;
+
         // Get collateral state
         let collateral = Collateral::unpack(&collateral_info.data.borrow())?;
 
@@ -675,10 +769,21 @@ impl Processor {
             return Err(ProgramError::InvalidArgument);
         }
 
+        let clock = &Clock::from_account_info(clock_info)?;
+
+        let (liquidity_market_price, collateral_market_price) = get_prices_from_oracles(
+            &liquidity.oracle,
+            &collateral.oracle,
+            liquidity_oracle_info,
+            collateral_oracle_info,
+            clock,
+        )?;
+
         obligation.collateral_withdraw(amount)?;
-        
-        // Check obligation health
-        collateral.check_health(obligation.calc_health()?)?;
+
+        // Check obligation ratio
+        collateral
+            .check_ratio(obligation.calc_ratio(liquidity_market_price, collateral_market_price)?)?;
 
         Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
 
@@ -712,7 +817,11 @@ impl Processor {
         let market_info = next_account_info(account_info_iter)?;
         let obligation_owner_info = next_account_info(account_info_iter)?;
         let market_authority_info = next_account_info(account_info_iter)?;
+        let liquidity_oracle_info = next_account_info(account_info_iter)?;
+        let collateral_oracle_info = next_account_info(account_info_iter)?;
+        let clock_info = next_account_info(account_info_iter)?;
         let _token_program_info = next_account_info(account_info_iter)?;
+        let clock = &Clock::from_account_info(clock_info)?;
 
         if !obligation_owner_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature);
@@ -772,11 +881,23 @@ impl Processor {
             return Err(ProgramError::InvalidArgument);
         }
 
+        let (liquidity_market_price, collateral_market_price) = get_prices_from_oracles(
+            &liquidity.oracle,
+            &collateral.oracle,
+            liquidity_oracle_info,
+            collateral_oracle_info,
+            clock,
+        )?;
+
+        let effective_interest =
+            obligation.calc_effective_interest_amount(clock.slot, liquidity.interest)?;
+        obligation.update_interest_amount(effective_interest);
+        obligation.update_slot(clock.slot);
+
         obligation.liquidity_borrow(amount)?;
         liquidity.borrow(amount)?;
-
-        // Check obligation health
-        collateral.check_health(obligation.calc_health()?)?;
+        collateral
+            .check_ratio(obligation.calc_ratio(liquidity_market_price, collateral_market_price)?)?;
 
         Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
         Liquidity::pack(liquidity, *liquidity_info.data.borrow_mut())?;
@@ -809,7 +930,9 @@ impl Processor {
         let liquidity_token_account_info = next_account_info(account_info_iter)?;
         let market_info = next_account_info(account_info_iter)?;
         let user_transfer_authority_info = next_account_info(account_info_iter)?;
+        let clock_info = next_account_info(account_info_iter)?;
         let _token_program_info = next_account_info(account_info_iter)?;
+        let clock = &Clock::from_account_info(clock_info)?;
 
         if market_info.owner != program_id {
             msg!("Market provided is not owned by the market program");
@@ -847,13 +970,24 @@ impl Processor {
             return Err(ProgramError::InvalidArgument);
         }
 
+        let effective_interest =
+            obligation.calc_effective_interest_amount(clock.slot, liquidity.interest)?;
+        msg!("effective_interest: {}", effective_interest);
+
+        // 0. First we repay effective interest
+        obligation.update_interest_amount(effective_interest.checked_sub(amount).unwrap_or(0));
+        obligation.update_slot(clock.slot);
+
+        // 1. And then we repay borrowed liquidity
+        let repay_amount = amount.checked_sub(effective_interest).unwrap_or(0);
         let repay_limit = obligation.amount_liquidity_borrowed;
-        if amount > repay_limit {
+        if repay_amount > repay_limit {
             msg!("Repay limit exceeded");
             return Err(ProgramError::InvalidArgument);
         }
-        obligation.liquidity_repay(amount)?;
-        liquidity.repay(amount)?;
+
+        obligation.liquidity_repay(repay_amount)?;
+        liquidity.repay(repay_amount)?;
 
         Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
         Liquidity::pack(liquidity, *liquidity_info.data.borrow_mut())?;
@@ -865,6 +999,134 @@ impl Processor {
             user_transfer_authority_info.clone(),
             amount,
             &[],
+        )?;
+
+        Ok(())
+    }
+
+    /// Process LiquidateObligation instruction
+    pub fn liquidate_obligation(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let obligation_info = next_account_info(account_info_iter)?;
+        let source_info = next_account_info(account_info_iter)?;
+        let destination_info = next_account_info(account_info_iter)?;
+        let liquidity_info = next_account_info(account_info_iter)?;
+        let collateral_info = next_account_info(account_info_iter)?;
+        let liquidity_token_account_info = next_account_info(account_info_iter)?;
+        let collateral_token_account_info = next_account_info(account_info_iter)?;
+        let market_info = next_account_info(account_info_iter)?;
+        let user_transfer_authority_info = next_account_info(account_info_iter)?;
+        let market_authority_info = next_account_info(account_info_iter)?;
+        let liquidity_oracle_info = next_account_info(account_info_iter)?;
+        let collateral_oracle_info = next_account_info(account_info_iter)?;
+        let clock_info = next_account_info(account_info_iter)?;
+        let _token_program_info = next_account_info(account_info_iter)?;
+
+        if !user_transfer_authority_info.is_signer {
+            return Err(ProgramError::MissingRequiredSignature);
+        }
+
+        if market_info.owner != program_id {
+            msg!("Market provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
+        if liquidity_info.owner != program_id {
+            msg!("Liquidity provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
+        if collateral_info.owner != program_id {
+            msg!("Collateral provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
+        if obligation_info.owner != program_id {
+            msg!("Obligation provided is not owned by the market program");
+            return Err(LendingError::InvalidAccountOwner.into());
+        }
+
+        // Get obligation state
+        let mut obligation = Obligation::unpack(&obligation_info.data.borrow())?;
+
+        if obligation.liquidity != *liquidity_info.key {
+            msg!("Obligation liquidity does not match the liquidity provided");
+            return Err(ProgramError::InvalidArgument);
+        }
+
+        if obligation.collateral != *collateral_info.key {
+            msg!("Obligation collateral does not match the collateral provided");
+            return Err(ProgramError::InvalidArgument);
+        }
+
+        if obligation.market != *market_info.key {
+            msg!("Obligation market does not match the market provided");
+            return Err(ProgramError::InvalidArgument);
+        }
+
+        // Get liquidity state
+        let mut liquidity = Liquidity::unpack(&liquidity_info.data.borrow())?;
+
+        if liquidity.token_account != *liquidity_token_account_info.key {
+            msg!("Liquidity token account does not match the token account provided");
+            return Err(ProgramError::InvalidArgument);
+        }
+
+        // Get collateral state
+        let collateral = Collateral::unpack(&collateral_info.data.borrow())?;
+
+        if collateral.token_account != *collateral_token_account_info.key {
+            msg!("Collateral token account does not match the token account provided");
+            return Err(ProgramError::InvalidArgument);
+        }
+
+        let clock = &Clock::from_account_info(clock_info)?;
+
+        let (liquidity_market_price, collateral_market_price) = get_prices_from_oracles(
+            &liquidity.oracle,
+            &collateral.oracle,
+            liquidity_oracle_info,
+            collateral_oracle_info,
+            clock,
+        )?;
+
+        // 0. Check that we can liquidate
+        collateral.check_healthy(
+            obligation.calc_ratio(liquidity_market_price, collateral_market_price)?,
+        )?;
+
+        // 1. Repay
+        let repay_amount = obligation.amount_liquidity_borrowed;
+        obligation.liquidity_repay(repay_amount)?;
+        liquidity.repay(repay_amount)?;
+
+        Liquidity::pack(liquidity, *liquidity_info.data.borrow_mut())?;
+
+        // Transfer liquidity from source liquidator to token account
+        spl_token_transfer(
+            source_info.clone(),
+            liquidity_token_account_info.clone(),
+            user_transfer_authority_info.clone(),
+            repay_amount,
+            &[],
+        )?;
+
+        // 2. Withdraw
+        let withdraw_amount = obligation.amount_collateral_deposited;
+        obligation.collateral_withdraw(withdraw_amount)?;
+
+        Obligation::pack(obligation, *obligation_info.data.borrow_mut())?;
+
+        let (_, bump_seed) = find_program_address(program_id, market_info.key);
+        let signers_seeds = &[&market_info.key.to_bytes()[..32], &[bump_seed]];
+
+        // Transfer collateral from token account to destination borrower
+        spl_token_transfer(
+            collateral_token_account_info.clone(),
+            destination_info.clone(),
+            market_authority_info.clone(),
+            withdraw_amount,
+            &[signers_seeds],
         )?;
 
         Ok(())
@@ -884,9 +1146,9 @@ impl Processor {
                 Self::init_market(program_id, accounts)
             }
 
-            LendingInstruction::CreateLiquidityToken => {
+            LendingInstruction::CreateLiquidityToken { interest } => {
                 msg!("LendingInstruction: CreateLiquidityToken");
-                Self::create_liquidity_token(program_id, accounts)
+                Self::create_liquidity_token(program_id, interest, accounts)
             }
 
             LendingInstruction::UpdateLiquidityToken { status } => {
@@ -950,6 +1212,11 @@ impl Processor {
             LendingInstruction::ObligationLiquidityRepay { amount } => {
                 msg!("LendingInstruction: ObligationLiquidityRepay");
                 Self::obligation_liquidity_repay(program_id, amount, accounts)
+            }
+
+            LendingInstruction::LiquidateObligation => {
+                msg!("LendingInstruction: LiquidateObligation");
+                Self::liquidate_obligation(program_id, accounts)
             }
         }
     }
@@ -1082,6 +1349,62 @@ pub fn spl_token_burn<'a>(
     )?;
 
     invoke_signed(&ix, &[mint, account, authority], signers_seeds)
+}
+
+/// Fetch prices from oracle accounts
+pub fn get_prices_from_oracles(
+    liquidity_oracle: &Pubkey,
+    collateral_oracle: &Pubkey,
+    liquidity_oracle_info: &AccountInfo,
+    collateral_oracle_info: &AccountInfo,
+    clock: &Clock,
+) -> Result<(u64, u64), ProgramError> {
+    if liquidity_oracle != liquidity_oracle_info.key {
+        return Err(LendingError::InvalidOracle.into());
+    }
+
+    if collateral_oracle != collateral_oracle_info.key {
+        return Err(LendingError::InvalidOracle.into());
+    }
+
+    let liquidity_market_price = get_pyth_price(liquidity_oracle_info, clock)?;
+    let collateral_market_price = get_pyth_price(collateral_oracle_info, clock)?;
+
+    msg!(
+        "Market prices: {} {}",
+        liquidity_market_price,
+        collateral_market_price,
+    );
+
+    Ok((liquidity_market_price, collateral_market_price))
+}
+
+fn get_pyth_price(pyth_price_info: &AccountInfo, clock: &Clock) -> Result<u64, ProgramError> {
+    const STALE_AFTER_SLOTS_ELAPSED: u64 = 5;
+
+    let pyth_price_data = pyth_price_info.try_borrow_data()?;
+    let pyth_price = pyth::load::<Price>(&pyth_price_data).unwrap();
+
+    if pyth_price.ptype != PriceType::Price {
+        msg!("Oracle price type is invalid");
+        return Err(LendingError::InvalidOracleConfig.into());
+    }
+
+    let slots_elapsed = clock
+        .slot
+        .checked_sub(pyth_price.valid_slot)
+        .ok_or(LendingError::MathOverflow)?;
+    if slots_elapsed >= STALE_AFTER_SLOTS_ELAPSED {
+        msg!("Oracle price is stale");
+        return Err(LendingError::InvalidOracleConfig.into());
+    }
+
+    let price: u64 = pyth_price.agg.price.try_into().map_err(|_| {
+        msg!("Oracle price cannot be negative");
+        LendingError::InvalidOracleConfig
+    })?;
+
+    Ok(price)
 }
 
 fn assert_rent_exempt(rent: &Rent, account_info: &AccountInfo) -> ProgramResult {

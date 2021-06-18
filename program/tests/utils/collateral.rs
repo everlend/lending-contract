@@ -1,4 +1,4 @@
-use super::{get_account, market::MarketInfo};
+use super::{get_account, market::MarketInfo, oracle::TestOracle};
 use everlend_lending::{
     find_program_address, id, instruction,
     state::{Collateral, CollateralStatus, RATIO_POWER},
@@ -19,10 +19,11 @@ pub struct CollateralInfo {
     pub collateral_pubkey: Pubkey,
     pub token_mint: Keypair,
     pub token_account: Keypair,
+    pub oracle: Pubkey,
 }
 
 impl CollateralInfo {
-    pub fn new(seed: &str, market_info: &MarketInfo) -> Self {
+    pub fn new(seed: &str, market_info: &MarketInfo, oracle: &TestOracle) -> Self {
         let (market_authority, _) =
             find_program_address(&everlend_lending::id(), &market_info.market.pubkey());
 
@@ -30,6 +31,7 @@ impl CollateralInfo {
             collateral_pubkey: Pubkey::create_with_seed(&market_authority, seed, &id()).unwrap(),
             token_mint: Keypair::new(),
             token_account: Keypair::new(),
+            oracle: oracle.price_pubkey,
         }
     }
 
@@ -42,6 +44,7 @@ impl CollateralInfo {
         &self,
         context: &mut ProgramTestContext,
         market_info: &MarketInfo,
+        oracle: &TestOracle,
     ) -> transport::Result<()> {
         let rent = context.banks_client.get_rent().await.unwrap();
 
@@ -69,6 +72,8 @@ impl CollateralInfo {
                     &self.token_account.pubkey(),
                     &market_info.market.pubkey(),
                     &market_info.owner.pubkey(),
+                    &oracle.product_pubkey,
+                    &oracle.price_pubkey,
                 )
                 .unwrap(),
             ],

@@ -1,4 +1,6 @@
-use super::{collateral::CollateralInfo, get_account, liquidity::LiquidityInfo};
+use super::{
+    collateral::CollateralInfo, get_account, liquidity::LiquidityInfo, oracle::TestOracle,
+};
 use crate::utils::create_mint;
 use everlend_lending::{id, instruction, state::Market};
 use solana_program::{borsh::get_packed_len, program_pack::Pack, system_instruction};
@@ -53,16 +55,17 @@ impl MarketInfo {
     pub async fn create_liquidity_token(
         &self,
         context: &mut ProgramTestContext,
+        oracle: &TestOracle,
     ) -> transport::Result<LiquidityInfo> {
         let liquidity_tokens = self.get_data(context).await.liquidity_tokens;
         let seed = format!("liquidity{:?}", liquidity_tokens);
-        let liquidity_info = LiquidityInfo::new(&seed, &self);
+        let liquidity_info = LiquidityInfo::new(&seed, &self, oracle);
 
         create_mint(context, &liquidity_info.token_mint, &self.owner.pubkey())
             .await
             .unwrap();
 
-        liquidity_info.create(context, self).await.unwrap();
+        liquidity_info.create(context, self, oracle).await.unwrap();
 
         Ok(liquidity_info)
     }
@@ -70,16 +73,17 @@ impl MarketInfo {
     pub async fn create_collateral_token(
         &self,
         context: &mut ProgramTestContext,
+        oracle: &TestOracle,
     ) -> transport::Result<CollateralInfo> {
         let collateral_tokens = self.get_data(context).await.collateral_tokens;
         let seed = format!("collateral{:?}", collateral_tokens);
-        let collateral_info = CollateralInfo::new(&seed, self);
+        let collateral_info = CollateralInfo::new(&seed, self, oracle);
 
         create_mint(context, &collateral_info.token_mint, &self.owner.pubkey())
             .await
             .unwrap();
 
-        collateral_info.create(context, self).await.unwrap();
+        collateral_info.create(context, self, oracle).await.unwrap();
 
         Ok(collateral_info)
     }

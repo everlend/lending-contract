@@ -8,13 +8,15 @@ use solana_sdk::signer::Signer;
 use utils::*;
 
 async fn setup() -> (ProgramTestContext, MarketInfo, LiquidityInfo) {
-    let mut context = program_test().start_with_context().await;
+    let mut test = program_test();
+    let sol_oracle = add_sol_oracle(&mut test);
+    let mut context = test.start_with_context().await;
 
     let market_info = MarketInfo::new();
     market_info.init(&mut context).await.unwrap();
 
     let liquidity_info = market_info
-        .create_liquidity_token(&mut context)
+        .create_liquidity_token(&mut context, &sol_oracle)
         .await
         .unwrap();
 
@@ -65,7 +67,7 @@ async fn success() {
 }
 
 #[tokio::test]
-async fn two_deposits() {
+async fn success_two_deposits() {
     let (mut context, market_info, liquidity_info) = setup().await;
     let provider_actor = ProviderActor::new();
 

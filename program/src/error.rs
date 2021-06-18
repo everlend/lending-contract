@@ -17,9 +17,22 @@ pub enum LendingError {
     /// The calculation failed.
     #[error("Calculation failure")]
     CalculationFailure,
-    /// Collateral health check failed, returned if user borrows too much or withdraws too much collateral.
-    #[error("Collateral health check failed")]
-    CollateralHealthCheckFailed,
+    /// Math operation overflow
+    #[error("Math operation overflow")]
+    MathOverflow,
+    /// Collateral ratio check failed, returned if user borrows too much or withdraws too much collateral.
+    #[error("Collateral ratio check failed")]
+    CollateralRatioCheckFailed,
+    /// Collateral healthy check failed, returned if user try
+    /// liquidate obligation when ratio is less than healthy.
+    #[error("Collateral healthy check failed")]
+    CollateralHealthyCheckFailed,
+    /// Invalid oracle
+    #[error("Invalid oracle")]
+    InvalidOracle,
+    /// Invalid oracle config
+    #[error("Invalid oracle config")]
+    InvalidOracleConfig,
 }
 
 impl PrintProgramError for LendingError {

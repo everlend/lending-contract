@@ -1,7 +1,7 @@
-use super::{get_account, market::MarketInfo};
+use super::{get_account, market::MarketInfo, oracle::TestOracle};
 use everlend_lending::{
     find_program_address, id, instruction,
-    state::{Liquidity, LiquidityStatus},
+    state::{Liquidity, LiquidityStatus, INTEREST_POWER},
 };
 use solana_program::{program_pack::Pack, pubkey::Pubkey, system_instruction};
 use solana_program_test::ProgramTestContext;
@@ -11,16 +11,19 @@ use solana_sdk::{
     transport,
 };
 
+pub const INTEREST: u64 = 1 * INTEREST_POWER / 100; // 1% per slot
+
 #[derive(Debug)]
 pub struct LiquidityInfo {
     pub liquidity_pubkey: Pubkey,
     pub token_mint: Keypair,
     pub token_account: Keypair,
     pub pool_mint: Keypair,
+    pub oracle: Pubkey,
 }
 
 impl LiquidityInfo {
-    pub fn new(seed: &str, market_info: &MarketInfo) -> Self {
+    pub fn new(seed: &str, market_info: &MarketInfo, oracle: &TestOracle) -> Self {
         let (market_authority, _) =
             find_program_address(&everlend_lending::id(), &market_info.market.pubkey());
 
@@ -29,6 +32,7 @@ impl LiquidityInfo {
             token_mint: Keypair::new(),
             token_account: Keypair::new(),
             pool_mint: Keypair::new(),
+            oracle: oracle.price_pubkey,
         }
     }
 
@@ -41,6 +45,7 @@ impl LiquidityInfo {
         &self,
         context: &mut ProgramTestContext,
         market_info: &MarketInfo,
+        oracle: &TestOracle,
     ) -> transport::Result<()> {
         let rent = context.banks_client.get_rent().await.unwrap();
 
@@ -68,12 +73,15 @@ impl LiquidityInfo {
                 ),
                 instruction::create_liquidity_token(
                     &id(),
+                    INTEREST,
                     &self.liquidity_pubkey,
                     &self.token_mint.pubkey(),
                     &self.token_account.pubkey(),
                     &self.pool_mint.pubkey(),
                     &market_info.market.pubkey(),
                     &market_info.owner.pubkey(),
+                    &oracle.product_pubkey,
+                    &oracle.price_pubkey,
                 )
                 .unwrap(),
             ],

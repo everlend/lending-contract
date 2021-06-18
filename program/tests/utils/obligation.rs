@@ -111,6 +111,7 @@ impl ObligationInfo {
         &self,
         context: &mut ProgramTestContext,
         market_info: &MarketInfo,
+        liquidity_info: &LiquidityInfo,
         collateral_info: &CollateralInfo,
         amount: u64,
         destination: &Pubkey,
@@ -120,11 +121,14 @@ impl ObligationInfo {
                 &id(),
                 amount,
                 &self.obligation_pubkey,
+                &liquidity_info.liquidity_pubkey,
                 &collateral_info.collateral_pubkey,
                 destination,
                 &collateral_info.token_account.pubkey(),
                 &market_info.market.pubkey(),
                 &self.owner.pubkey(),
+                &liquidity_info.oracle,
+                &collateral_info.oracle,
             )
             .unwrap()],
             Some(&context.payer.pubkey()),
@@ -155,6 +159,8 @@ impl ObligationInfo {
                 &liquidity_info.token_account.pubkey(),
                 &market_info.market.pubkey(),
                 &self.owner.pubkey(),
+                &liquidity_info.oracle,
+                &collateral_info.oracle,
             )
             .unwrap()],
             Some(&context.payer.pubkey()),
@@ -187,6 +193,42 @@ impl ObligationInfo {
             .unwrap()],
             Some(&context.payer.pubkey()),
             &[&context.payer, &self.owner],
+            context.last_blockhash,
+        );
+
+        context.banks_client.process_transaction(tx).await
+    }
+
+    pub async fn liquidate(
+        &self,
+        context: &mut ProgramTestContext,
+        market_info: &MarketInfo,
+        liquidity_info: &LiquidityInfo,
+        collateral_info: &CollateralInfo,
+        source: &Pubkey,
+        destination: &Pubkey,
+        liquidator: Option<&Keypair>,
+    ) -> transport::Result<()> {
+        let liquidator = liquidator.unwrap_or(&self.owner);
+
+        let tx = Transaction::new_signed_with_payer(
+            &[instruction::liquidate_obligation(
+                &id(),
+                &self.obligation_pubkey,
+                source,
+                destination,
+                &liquidity_info.liquidity_pubkey,
+                &collateral_info.collateral_pubkey,
+                &liquidity_info.token_account.pubkey(),
+                &collateral_info.token_account.pubkey(),
+                &market_info.market.pubkey(),
+                &liquidator.pubkey(),
+                &liquidity_info.oracle,
+                &collateral_info.oracle,
+            )
+            .unwrap()],
+            Some(&context.payer.pubkey()),
+            &[&context.payer, liquidator],
             context.last_blockhash,
         );
 

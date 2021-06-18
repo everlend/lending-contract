@@ -174,6 +174,8 @@ fn command_create_liquidity_token(
     config: &Config,
     market_pubkey: &Pubkey,
     token_mint: &Pubkey,
+    oracle_product: &Pubkey,
+    oracle_price: &Pubkey,
 ) -> CommandResult {
     let market_account = config.rpc_client.get_account(&market_pubkey)?;
     let market = Market::unpack(&market_account.data)?;
@@ -193,6 +195,8 @@ fn command_create_liquidity_token(
     println!("Token account: {}", &token_account.pubkey());
     println!("Pool mint: {}", &pool_mint.pubkey());
     println!("Market: {}", &market_pubkey);
+    println!("Oracle product: {}", oracle_product);
+    println!("Oracle price: {}", oracle_price);
 
     let token_account_balance = config
         .rpc_client
@@ -227,6 +231,8 @@ fn command_create_liquidity_token(
                 &pool_mint.pubkey(),
                 &market_pubkey,
                 &config.owner.pubkey(),
+                oracle_product,
+                oracle_price,
             )?,
         ],
         Some(&config.fee_payer.pubkey()),
@@ -257,6 +263,8 @@ fn command_create_collateral_token(
     token_mint: &Pubkey,
     ui_ratio_initial: f64,
     ui_ratio_healthy: f64,
+    oracle_product: &Pubkey,
+    oracle_price: &Pubkey,
 ) -> CommandResult {
     let market_account = config.rpc_client.get_account(&market_pubkey)?;
     let market = Market::unpack(&market_account.data)?;
@@ -280,6 +288,8 @@ fn command_create_collateral_token(
     println!("Token mint: {}", &token_mint);
     println!("Token account: {}", &token_account.pubkey());
     println!("Market: {}", &market_pubkey);
+    println!("Oracle product: {}", oracle_product);
+    println!("Oracle price: {}", oracle_price);
 
     let token_account_balance = config
         .rpc_client
@@ -305,6 +315,8 @@ fn command_create_collateral_token(
                 &token_account.pubkey(),
                 &market_pubkey,
                 &config.owner.pubkey(),
+                oracle_product,
+                oracle_price,
             )?,
         ],
         Some(&config.fee_payer.pubkey()),
@@ -533,6 +545,24 @@ fn main() {
                         .takes_value(true)
                         .required(true)
                         .help("Mint for the token to be added as liquidity"),
+                )
+                .arg(
+                    Arg::with_name("oracle_product")
+                        .long("product")
+                        .validator(is_pubkey)
+                        .value_name("ADDRESS")
+                        .takes_value(true)
+                        .required(true)
+                        .help("Oracle product pubkey"),
+                )
+                .arg(
+                    Arg::with_name("oracle_price")
+                        .long("price")
+                        .validator(is_pubkey)
+                        .value_name("ADDRESS")
+                        .takes_value(true)
+                        .required(true)
+                        .help("Oracle price pubkey"),
                 ),
         )
         .subcommand(
@@ -573,6 +603,24 @@ fn main() {
                         .takes_value(true)
                         .default_value("0.75")
                         .help("Ratio healthy"),
+                )
+                .arg(
+                    Arg::with_name("oracle_product")
+                        .long("product")
+                        .validator(is_pubkey)
+                        .value_name("ADDRESS")
+                        .takes_value(true)
+                        .required(true)
+                        .help("Oracle product pubkey"),
+                )
+                .arg(
+                    Arg::with_name("oracle_price")
+                        .long("price")
+                        .validator(is_pubkey)
+                        .value_name("ADDRESS")
+                        .takes_value(true)
+                        .required(true)
+                        .help("Oracle price pubkey"),
                 ),
         )
         .subcommand(
@@ -730,19 +778,31 @@ fn main() {
         ("create-liquidity", Some(arg_matches)) => {
             let market_pubkey = pubkey_of(arg_matches, "market_pubkey").unwrap();
             let token_mint = pubkey_of(arg_matches, "token_mint").unwrap();
-            command_create_liquidity_token(&config, &market_pubkey, &token_mint)
+            let oracle_product = pubkey_of(arg_matches, "oracle_product").unwrap();
+            let oracle_price = pubkey_of(arg_matches, "oracle_price").unwrap();
+            command_create_liquidity_token(
+                &config,
+                &market_pubkey,
+                &token_mint,
+                &oracle_product,
+                &oracle_price,
+            )
         }
         ("create-collateral", Some(arg_matches)) => {
             let market_pubkey = pubkey_of(arg_matches, "market_pubkey").unwrap();
             let token_mint = pubkey_of(arg_matches, "token_mint").unwrap();
             let ratio_initial = value_of::<f64>(arg_matches, "ratio_initial").unwrap();
             let ratio_healthy = value_of::<f64>(arg_matches, "ratio_healthy").unwrap();
+            let oracle_product = pubkey_of(arg_matches, "oracle_product").unwrap();
+            let oracle_price = pubkey_of(arg_matches, "oracle_price").unwrap();
             command_create_collateral_token(
                 &config,
                 &market_pubkey,
                 &token_mint,
                 ratio_initial,
                 ratio_healthy,
+                &oracle_product,
+                &oracle_price,
             )
         }
         ("update-liquidity", Some(arg_matches)) => {

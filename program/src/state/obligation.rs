@@ -4,6 +4,7 @@ use crate::error::LendingError;
 use super::*;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use solana_program::{
+    clock::Slot,
     entrypoint::ProgramResult,
     msg,
     program_error::ProgramError,
@@ -29,6 +30,10 @@ pub struct Obligation {
     pub amount_liquidity_borrowed: u64,
     /// Amount of deposited collateral
     pub amount_collateral_deposited: u64,
+    /// Interest amount
+    pub interest_amount: u64,
+    /// Interest slot
+    pub interest_slot: Slot,
 }
 
 impl Obligation {
@@ -41,6 +46,8 @@ impl Obligation {
         self.collateral = params.collateral;
         self.amount_liquidity_borrowed = 0;
         self.amount_collateral_deposited = 0;
+        self.interest_amount = 0;
+        self.interest_slot = params.interest_slot;
     }
 
     /// Increase amount of deposited collateral
@@ -83,47 +90,130 @@ impl Obligation {
         Ok(())
     }
 
-    /// Calculate obligation health ratio
-    pub fn calc_health(&self) -> Result<u64, ProgramError> {
+    /// Calc pending interest amount
+    /// borrowed * (current_slot - interest_slot) * interest
+    pub fn calc_pending_interest_amount(
+        &self,
+        slot: Slot,
+        interest: u64,
+    ) -> Result<u64, ProgramError> {
+        let slot_offset = slot
+            .checked_sub(self.interest_slot)
+            .ok_or(LendingError::CalculationFailure)?;
+
+        let pending = (self.amount_liquidity_borrowed as u128)
+            .checked_mul(slot_offset as u128)
+            .ok_or(LendingError::CalculationFailure)?
+            .checked_mul(interest as u128)
+            .ok_or(LendingError::CalculationFailure)?
+            .checked_div(INTEREST_POWER as u128)
+            .ok_or(LendingError::CalculationFailure)? as u64;
+
+        Ok(pending)
+    }
+
+    /// Calc effective interest amount
+    /// interest_amount + borrowed * (current_slot - interest_slot) * interest
+    pub fn calc_effective_interest_amount(
+        &self,
+        slot: Slot,
+        interest: u64,
+    ) -> Result<u64, ProgramError> {
+        let amount = self
+            .interest_amount
+            .checked_add(self.calc_pending_interest_amount(slot, interest)?)
+            .ok_or(LendingError::CalculationFailure)?;
+
+        Ok(amount)
+    }
+
+    /// Update intereset per each borrow
+    pub fn update_interest_amount(&mut self, amount: u64) {
+        self.interest_amount = amount;
+    }
+
+    /// Update slot to last
+    pub fn update_slot(&mut self, slot: Slot) {
+        self.interest_slot = slot;
+    }
+
+    /// Calculate obligation ratio
+    pub fn calc_ratio(
+        &self,
+        liquidity_market_price: u64,
+        collateral_market_price: u64,
+    ) -> Result<u64, ProgramError> {
         // TODO: Add oracle interface here to calculate collateral and borrowed liquidity value.
         // For now we assume that collateral and liquidity tokens have 1:1 value ratio
-        let result = (self.amount_liquidity_borrowed as u128)
-            .checked_mul(RATIO_POWER as u128)
-            .ok_or(LendingError::CalculationFailure)?
-            .checked_div(self.amount_collateral_deposited as u128)
-            .ok_or(LendingError::CollateralHealthCheckFailed)? as u64;
+        let result = if self.amount_liquidity_borrowed == 0 && self.amount_collateral_deposited == 0
+        {
+            0
+        } else {
+            let liquidity_value = (self.amount_liquidity_borrowed as u128)
+                .checked_mul(liquidity_market_price as u128)
+                .ok_or(LendingError::CalculationFailure)?;
+            let collateral_value = (self.amount_collateral_deposited as u128)
+                .checked_mul(collateral_market_price as u128)
+                .ok_or(LendingError::CalculationFailure)?;
+
+            liquidity_value
+                .checked_mul(RATIO_POWER as u128)
+                .ok_or(LendingError::CalculationFailure)?
+                .checked_div(collateral_value)
+                .ok_or(LendingError::CollateralRatioCheckFailed)? as u64
+        };
 
         Ok(result)
     }
 
     /// Calculation of available funds for withdrawal
-    pub fn calc_withdrawal_limit(&self, ratio_initial: u64) -> Result<u64, ProgramError> {
+    pub fn calc_withdrawal_limit(
+        &self,
+        ratio_initial: u64,
+        liquidity_market_price: u64,
+        collateral_market_price: u64,
+    ) -> Result<u64, ProgramError> {
+        let liquidity_value = (self.amount_liquidity_borrowed as u128)
+            .checked_mul(liquidity_market_price as u128)
+            .ok_or(LendingError::CalculationFailure)?;
+
         // deposited - borrowed / ratio_initial
-        let result = self
-            .amount_collateral_deposited
+        let result = (self.amount_collateral_deposited as u128)
             .checked_sub(
-                self.amount_liquidity_borrowed
-                    .checked_mul(RATIO_POWER)
+                liquidity_value
+                    .checked_mul(RATIO_POWER as u128)
                     .ok_or(LendingError::CalculationFailure)?
-                    .checked_div(ratio_initial)
+                    .checked_div(ratio_initial as u128)
+                    .ok_or(LendingError::CalculationFailure)?
+                    .checked_div(collateral_market_price as u128)
                     .ok_or(LendingError::CalculationFailure)?,
             )
-            .ok_or(LendingError::CalculationFailure)?;
+            .ok_or(LendingError::CalculationFailure)? as u64;
 
         Ok(result)
     }
 
     /// Calculation of available funds for borrowing
-    pub fn calc_borrowing_limit(&self, ratio_initial: u64) -> Result<u64, ProgramError> {
-        // deposited * ratio_initial - borrowed
-        let result = self
-            .amount_collateral_deposited
-            .checked_mul(ratio_initial)
-            .ok_or(LendingError::CalculationFailure)?
-            .checked_div(RATIO_POWER)
-            .ok_or(LendingError::CalculationFailure)?
-            .checked_sub(self.amount_liquidity_borrowed)
+    pub fn calc_borrowing_limit(
+        &self,
+        ratio_initial: u64,
+        liquidity_market_price: u64,
+        collateral_market_price: u64,
+    ) -> Result<u64, ProgramError> {
+        let collateral_value = (self.amount_collateral_deposited as u128)
+            .checked_mul(collateral_market_price as u128)
             .ok_or(LendingError::CalculationFailure)?;
+
+        // deposited * ratio_initial - borrowed
+        let result = collateral_value
+            .checked_mul(ratio_initial as u128)
+            .ok_or(LendingError::CalculationFailure)?
+            .checked_div(RATIO_POWER as u128)
+            .ok_or(LendingError::CalculationFailure)?
+            .checked_div(liquidity_market_price as u128)
+            .ok_or(LendingError::CalculationFailure)?
+            .checked_sub(self.amount_liquidity_borrowed as u128)
+            .ok_or(LendingError::CalculationFailure)? as u64;
 
         Ok(result)
     }
@@ -131,8 +221,8 @@ impl Obligation {
 
 impl Sealed for Obligation {}
 impl Pack for Obligation {
-    // 1 + 32 + 32 + 32 + 32 + 8 + 8
-    const LEN: usize = 145;
+    // 1 + 32 + 32 + 32 + 32 + 8 + 8 + 8 + 8
+    const LEN: usize = 161;
 
     fn pack_into_slice(&self, dst: &mut [u8]) {
         let mut slice = dst;
@@ -157,6 +247,8 @@ pub struct InitObligationParams {
     pub liquidity: Pubkey,
     /// Collateral
     pub collateral: Pubkey,
+    /// Interest slot
+    pub interest_slot: Slot,
 }
 
 impl IsInitialized for Obligation {

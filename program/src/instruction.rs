@@ -36,7 +36,11 @@ pub enum LendingInstruction {
     /// [R] Rent sysvar
     /// [R] Sytem program
     /// [R] Token program id
-    CreateLiquidityToken,
+    /// [R] Oracle state account pubkey
+    CreateLiquidityToken {
+        /// Interest (10e12 precision)
+        interest: u64,
+    },
 
     /// Update liquidity token
     ///
@@ -61,6 +65,7 @@ pub enum LendingInstruction {
     /// [R] Rent sysvar
     /// [R] Sytem program
     /// [R] Token program id
+    /// [R] Oracle state account pubkey
     CreateCollateralToken {
         /// Fractional initial collateralization ratio (multiplied by 10e9)
         ratio_initial: u64,
@@ -127,8 +132,8 @@ pub enum LendingInstruction {
     /// [R] Obligation authority (owner/market/liquidity/collateral combination)
     /// [RS] Obligation owner
     /// [R] Rent sysvar
+    /// [R] Clock
     /// [R] Sytem program
-    /// [R] Token program id
     CreateObligation,
 
     /// Deposit collateral token to obligation
@@ -150,12 +155,16 @@ pub enum LendingInstruction {
     ///
     /// Accounts:
     /// [W] Obligation account
+    /// [R] Liquidity account
     /// [R] Collateral account
     /// [W] Destination account (for collateral token mint)
     /// [W] Collateral token account
     /// [R] Market account
     /// [RS] Obligation owner
     /// [R] Market authority
+    /// [R] Liquidity oracle state account pubkey
+    /// [R] Collateral oracle state account pubkey
+    /// [R] Clock
     /// [R] Token program id
     ObligationCollateralWithdraw {
         /// Amount of collateral to withdraw
@@ -173,6 +182,9 @@ pub enum LendingInstruction {
     /// [R] Market account
     /// [RS] Obligation owner
     /// [R] Market authority
+    /// [R] Liquidity oracle state account pubkey
+    /// [R] Collateral oracle state account pubkey
+    /// [R] Clock
     /// [R] Token program id
     ObligationLiquidityBorrow {
         /// Amount of liquidity to borrow
@@ -188,11 +200,31 @@ pub enum LendingInstruction {
     /// [W] Liquidity token account
     /// [R] Market account
     /// [RS] User transfer authority
+    /// [R] Clock
     /// [R] Token program id
     ObligationLiquidityRepay {
         /// Amount of liquidity to repay
         amount: u64,
     },
+
+    /// Repay the debt of a failing position and take the collateral
+    ///
+    /// Accounts:
+    /// [W] Obligation account
+    /// [W] Source liquidator account (for liquidity token)
+    /// [W] Destination liquidator account (for collateral token)
+    /// [R] Liquidity account
+    /// [R] Collateral account
+    /// [W] Liquidity token account
+    /// [W] Collateral token account
+    /// [R] Market account
+    /// [RS] User transfer authority
+    /// [R] Market authority
+    /// [R] Liquidity oracle state account pubkey
+    /// [R] Collateral oracle state account pubkey
+    /// [R] Clock
+    /// [R] Token program id
+    LiquidateObligation,
 }
 
 /// Create `InitMarket` instruction
@@ -220,14 +252,17 @@ pub fn init_market(
 /// Create `CreateLiquidityToken` instruction
 pub fn create_liquidity_token(
     program_id: &Pubkey,
+    interest: u64,
     liquidity: &Pubkey,
     token_mint: &Pubkey,
     token_account: &Pubkey,
     pool_mint: &Pubkey,
     market: &Pubkey,
     market_owner: &Pubkey,
+    oracle_product: &Pubkey,
+    oracle_price: &Pubkey,
 ) -> Result<Instruction, ProgramError> {
-    let init_data = LendingInstruction::CreateLiquidityToken;
+    let init_data = LendingInstruction::CreateLiquidityToken { interest };
     let data = init_data.try_to_vec()?;
     let (market_authority, _) = find_program_address(program_id, market);
 
@@ -239,6 +274,8 @@ pub fn create_liquidity_token(
         AccountMeta::new(*market, false),
         AccountMeta::new_readonly(*market_owner, true),
         AccountMeta::new_readonly(market_authority, false),
+        AccountMeta::new_readonly(*oracle_product, false),
+        AccountMeta::new_readonly(*oracle_price, false),
         AccountMeta::new_readonly(sysvar::rent::id(), false),
         AccountMeta::new_readonly(system_program::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
@@ -286,6 +323,8 @@ pub fn create_collateral_token(
     token_account: &Pubkey,
     market: &Pubkey,
     market_owner: &Pubkey,
+    oracle_product: &Pubkey,
+    oracle_price: &Pubkey,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LendingInstruction::CreateCollateralToken {
         ratio_initial,
@@ -301,6 +340,8 @@ pub fn create_collateral_token(
         AccountMeta::new(*market, false),
         AccountMeta::new_readonly(*market_owner, true),
         AccountMeta::new_readonly(market_authority, false),
+        AccountMeta::new_readonly(*oracle_product, false),
+        AccountMeta::new_readonly(*oracle_price, false),
         AccountMeta::new_readonly(sysvar::rent::id(), false),
         AccountMeta::new_readonly(system_program::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
@@ -437,6 +478,7 @@ pub fn create_obligation(
         AccountMeta::new_readonly(obligation_authority, false),
         AccountMeta::new_readonly(*owner, true),
         AccountMeta::new_readonly(sysvar::rent::id(), false),
+        AccountMeta::new_readonly(sysvar::clock::id(), false),
         AccountMeta::new_readonly(system_program::id(), false),
     ];
 
@@ -485,11 +527,14 @@ pub fn obligation_collateral_withdraw(
     program_id: &Pubkey,
     amount: u64,
     obligation: &Pubkey,
+    liquidity: &Pubkey,
     collateral: &Pubkey,
     destination: &Pubkey,
     collateral_token_account: &Pubkey,
     market: &Pubkey,
     obligation_owner: &Pubkey,
+    liquidity_oracle: &Pubkey,
+    collateral_oracle: &Pubkey,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LendingInstruction::ObligationCollateralWithdraw { amount };
     let data = init_data.try_to_vec()?;
@@ -497,12 +542,16 @@ pub fn obligation_collateral_withdraw(
 
     let accounts = vec![
         AccountMeta::new(*obligation, false),
+        AccountMeta::new_readonly(*liquidity, false),
         AccountMeta::new_readonly(*collateral, false),
         AccountMeta::new(*destination, false),
         AccountMeta::new(*collateral_token_account, false),
         AccountMeta::new_readonly(*market, false),
         AccountMeta::new_readonly(*obligation_owner, true),
         AccountMeta::new_readonly(market_authority, false),
+        AccountMeta::new_readonly(*liquidity_oracle, false),
+        AccountMeta::new_readonly(*collateral_oracle, false),
+        AccountMeta::new_readonly(sysvar::clock::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
     ];
 
@@ -525,6 +574,8 @@ pub fn obligation_liquidity_borrow(
     liquidity_token_account: &Pubkey,
     market: &Pubkey,
     obligation_owner: &Pubkey,
+    liquidity_oracle: &Pubkey,
+    collateral_oracle: &Pubkey,
 ) -> Result<Instruction, ProgramError> {
     let init_data = LendingInstruction::ObligationLiquidityBorrow { amount };
     let data = init_data.try_to_vec()?;
@@ -539,6 +590,9 @@ pub fn obligation_liquidity_borrow(
         AccountMeta::new_readonly(*market, false),
         AccountMeta::new_readonly(*obligation_owner, true),
         AccountMeta::new_readonly(market_authority, false),
+        AccountMeta::new_readonly(*liquidity_oracle, false),
+        AccountMeta::new_readonly(*collateral_oracle, false),
+        AccountMeta::new_readonly(sysvar::clock::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
     ];
 
@@ -571,6 +625,51 @@ pub fn obligation_liquidity_repay(
         AccountMeta::new(*liquidity_token_account, false),
         AccountMeta::new_readonly(*market, false),
         AccountMeta::new_readonly(*user_transfer_authority, true),
+        AccountMeta::new_readonly(sysvar::clock::id(), false),
+        AccountMeta::new_readonly(spl_token::id(), false),
+    ];
+
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts,
+        data,
+    })
+}
+
+/// Create `LiquidateObligation` instruction
+#[allow(clippy::too_many_arguments)]
+pub fn liquidate_obligation(
+    program_id: &Pubkey,
+    obligation: &Pubkey,
+    source: &Pubkey,
+    destination: &Pubkey,
+    liquidity: &Pubkey,
+    collateral: &Pubkey,
+    liquidity_token_account: &Pubkey,
+    collateral_token_account: &Pubkey,
+    market: &Pubkey,
+    user_transfer_authority: &Pubkey,
+    liquidity_oracle: &Pubkey,
+    collateral_oracle: &Pubkey,
+) -> Result<Instruction, ProgramError> {
+    let init_data = LendingInstruction::LiquidateObligation;
+    let data = init_data.try_to_vec()?;
+    let (market_authority, _) = find_program_address(program_id, market);
+
+    let accounts = vec![
+        AccountMeta::new(*obligation, false),
+        AccountMeta::new(*source, false),
+        AccountMeta::new(*destination, false),
+        AccountMeta::new(*liquidity, false),
+        AccountMeta::new(*collateral, false),
+        AccountMeta::new(*liquidity_token_account, false),
+        AccountMeta::new(*collateral_token_account, false),
+        AccountMeta::new_readonly(*market, false),
+        AccountMeta::new_readonly(*user_transfer_authority, true),
+        AccountMeta::new_readonly(market_authority, false),
+        AccountMeta::new_readonly(*liquidity_oracle, false),
+        AccountMeta::new_readonly(*collateral_oracle, false),
+        AccountMeta::new_readonly(sysvar::clock::id(), false),
         AccountMeta::new_readonly(spl_token::id(), false),
     ];
 

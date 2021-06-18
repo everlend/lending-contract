@@ -46,6 +46,8 @@ pub struct Collateral {
     pub ratio_initial: u64,
     /// Fractional limit for the healthy collateralization ratio (multiplied by 10e9)
     pub ratio_healthy: u64,
+    /// Oracle price account pubkey
+    pub oracle: Pubkey,
 }
 
 impl Collateral {
@@ -58,12 +60,22 @@ impl Collateral {
         self.token_account = params.token_account;
         self.ratio_initial = params.ratio_initial;
         self.ratio_healthy = params.ratio_healthy;
+        self.oracle = params.oracle;
     }
 
-    /// Check health to be within the collateral limits
-    pub fn check_health(&self, health: u64) -> ProgramResult {
-        if health > self.ratio_initial {
-            Err(LendingError::CollateralHealthCheckFailed.into())
+    /// Check ratio to be within the collateral limits
+    pub fn check_ratio(&self, ratio: u64) -> ProgramResult {
+        if ratio > self.ratio_initial {
+            Err(LendingError::CollateralRatioCheckFailed.into())
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Check healthy to liquidate
+    pub fn check_healthy(&self, ratio: u64) -> ProgramResult {
+        if ratio < self.ratio_healthy {
+            Err(LendingError::CollateralHealthyCheckFailed.into())
         } else {
             Ok(())
         }
@@ -72,8 +84,8 @@ impl Collateral {
 
 impl Sealed for Collateral {}
 impl Pack for Collateral {
-    // 1 + 1 + 32 + 32 + 32 + 8 + 8
-    const LEN: usize = 114;
+    // 1 + 1 + 32 + 32 + 32 + 8 + 8 + 32
+    const LEN: usize = 146;
 
     fn pack_into_slice(&self, dst: &mut [u8]) {
         let mut slice = dst;
@@ -81,7 +93,9 @@ impl Pack for Collateral {
     }
 
     fn unpack_from_slice(src: &[u8]) -> Result<Self, solana_program::program_error::ProgramError> {
-        Self::try_from_slice(src).map_err(|_| {
+        let mut src_mut = src;
+        Self::deserialize(&mut src_mut).map_err(|err| {
+            msg!("{:?}", err);
             msg!("Failed to deserialize");
             ProgramError::InvalidAccountData
         })
@@ -100,6 +114,8 @@ pub struct InitCollateralParams {
     pub ratio_initial: u64,
     /// Fractional limit for the healthy collateralization ratio (multiplied by 10e9)
     pub ratio_healthy: u64,
+    /// Oracle price account pubkey
+    pub oracle: Pubkey,
 }
 
 impl IsInitialized for Collateral {
